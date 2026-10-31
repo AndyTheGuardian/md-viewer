@@ -11,7 +11,7 @@ A native Linux Mint viewer that opens `.md` files and displays them formatted li
   - "Source": normal, unformatted Markdown.
   - "VS Code": formatted the way VS Code's Markdown preview does it.
 - *(Added 2026-10-27)* A theme switch with three choices: Follow system, Dark, Light.
-- *(Added 2026-10-31)* Editing in the code (Source) view, switched on with a button. Built with GtkSourceView, on the git branch `feature/source-editor`.
+- *(Added 2026-10-31)* Editing in the code (Source) view, switched on with a button. Built with GtkSourceView on the git branch `feature/source-editor`, merged into `main` on 2026-10-31.
 - *(Added 2026-10-31)* Creating a new .md file.
 
 ## Files

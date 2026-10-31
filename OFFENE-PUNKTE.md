@@ -22,7 +22,7 @@ Stand: 2026-10-31
 | ID | Beschreibung | Erledigt am |
 |---|---|---|
 | F1 | Editor-Umsetzung: Der Anwender hat sich für **GtkSourceView** entschieden. | 2026-10-31 |
-| F5 | Git: Der Anwender hat `git init` freigegeben. `main` enthält den Stand vom 2026-10-27, die Funktion liegt auf dem Branch `feature/source-editor`. | 2026-10-31 |
+| F5 | Git: Der Anwender hat `git init` freigegeben. Die Funktionen wurden auf `feature/source-editor` entwickelt und am 2026-10-31 in `main` gemergt. | 2026-10-31 |
 | F2–F4 | Speichern, ungespeicherte Änderungen, Button-Sichtbarkeit: nach Standardvorschlag umgesetzt, siehe Annahme A2. | 2026-10-31 |
 | A1 | „Code-Ansicht“ = Ansicht **Source** (so umgesetzt). | 2026-10-31 |
 | F6 | Neue Datei: Der Anwender hat entschieden, dass zuerst der Speicherort gewählt wird und die Datei in einem neuen Fenster öffnet. | 2026-10-31 |
