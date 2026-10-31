@@ -56,6 +56,16 @@ EDITOR_FONT_PX = 14  # matches the Source view
 # GtkSourceView style schemes per dark theme: VS Code colours from ./styles, else built-ins
 EDITOR_SCHEMES = {False: ("vscode-light", "classic"), True: ("vscode-dark", "oblivion")}
 STYLES_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "styles")
+# Markdown grammar from ./language-specs (fenced code in its language, coloured quotes), else built-in
+EDITOR_LANGUAGES = ("mdviewer-markdown", "markdown")
+LANGUAGE_SPECS_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "language-specs")
+
+
+def editor_language():
+    manager = GtkSource.LanguageManager.get_default()
+    if LANGUAGE_SPECS_DIR not in manager.get_search_path():
+        manager.set_search_path([LANGUAGE_SPECS_DIR, *manager.get_search_path()])
+    return next(filter(None, map(manager.get_language, EDITOR_LANGUAGES)))
 
 VIEW_MODES = [("source", "Source", "Markdown source with syntax highlighting (Ctrl+1)"),
               ("vscode", "VS Code", "Formatted like the VS Code Markdown preview (Ctrl+2)"),
@@ -430,8 +440,7 @@ class SourceEditor(Gtk.ScrolledWindow):
 
     def __init__(self):
         super().__init__()
-        language = GtkSource.LanguageManager.get_default().get_language("markdown")
-        self.buffer = GtkSource.Buffer(language=language, highlight_syntax=True)
+        self.buffer = GtkSource.Buffer(language=editor_language(), highlight_syntax=True)
         self.view = GtkSource.View(buffer=self.buffer, show_line_numbers=True, auto_indent=True,
                                    highlight_current_line=True, tab_width=4,
                                    wrap_mode=Gtk.WrapMode.WORD_CHAR, left_margin=16,

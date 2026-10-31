@@ -8,7 +8,8 @@ Stand: 2026-10-31
 |---|---|---|---|
 | A2 | Annahme | Speichern, ungespeicherte Änderungen und Button-Sichtbarkeit (ursprünglich F2–F4) wurden nach den vorgeschlagenen Standards umgesetzt: Strg+S bzw. Save-Button, Rückfrage „Save / Discard / Cancel“, Bearbeiten nur in der Source-Ansicht. Der Anwender hat dazu nicht ausdrücklich geantwortet. | vom Anwender zu bestätigen |
 | E2 | Einschränkung | Wird die Datei während der Bearbeitung von außen geändert, bemerkt der Editor das nicht. Beim Speichern werden die externen Änderungen überschrieben. | bekannt; ggf. Warnung vor dem Speichern nachrüsten |
-| E3 | Einschränkung | Der Editor nutzt jetzt VS-Code-Farben (`styles/vscode-*.xml`). Zwei Unterschiede zur Lesansicht bleiben, weil GtkSourceViews `markdown.lang` sie nicht erkennt: Zitattext wird nicht eingefärbt (nur das `>`), und Code in Fenced-Blocks (z. B. ```` ```python ````) ist einfarbig statt nach Sprache hervorgehoben. Lösbar mit einer eigenen, erweiterten `markdown.lang`. | bekannt; Erweiterung angeboten |
+| E9 | Einschränkung | Code in Fenced-Blöcken wird im Editor zeilenweise hervorgehoben. Mehrzeilige Strings und Kommentare (z. B. Python-Docstrings, `/* … */`) sind daher nur in ihrer ersten Zeile gefärbt. Grund: Sonst kann die eingebettete Grammatik das schließende ```` ``` ```` „verschlucken“ (z. B. JS-Template-Strings), und der Rest der Datei wird falsch gefärbt. | bekannt, bewusst gewählt |
+| E10 | Einschränkung | Restliche Unterschiede zur Lesansicht: Einfache Bezeichner (Variablen, Klassennamen) färbt GtkSourceView nicht ein, Pygments schon. Inline-HTML ist im Editor als Tag gefärbt, in der Lesansicht nicht. Nur 27 Sprachen werden in Fenced-Blöcken erkannt; andere sind einfarbig. | bekannt, akzeptiert |
 | E4 | Einschränkung | Dateien mit gemischten Zeilenenden (LF und CRLF) werden beim Speichern einheitlich mit CRLF geschrieben. | bekannt, akzeptiert |
 | E5 | Einschränkung | Dateien, die kein gültiges UTF-8 sind, können nicht bearbeitet werden: Der Bearbeiten-Button ist deaktiviert, damit beim Speichern keine Bytes verloren gehen. | bekannt, gewollt |
 | E6 | Einschränkung | Die Leseposition beim Wechsel zwischen Lesansicht und Editor wird nur näherungsweise übernommen (über den Anteil der Zeilen). | bekannt, akzeptiert |
@@ -25,4 +26,5 @@ Stand: 2026-10-31
 | F2–F4 | Speichern, ungespeicherte Änderungen, Button-Sichtbarkeit: nach Standardvorschlag umgesetzt, siehe Annahme A2. | 2026-10-31 |
 | A1 | „Code-Ansicht“ = Ansicht **Source** (so umgesetzt). | 2026-10-31 |
 | F6 | Neue Datei: Der Anwender hat entschieden, dass zuerst der Speicherort gewählt wird und die Datei in einem neuen Fenster öffnet. | 2026-10-31 |
+| E3 | Editor-Farben: VS-Code-Farbschemata (`styles/`) und eine erweiterte Grammatik (`language-specs/mdviewer-markdown.lang`) eingebaut. Zitattext und Code in Fenced-Blöcken werden jetzt eingefärbt. Rest siehe E9, E10. | 2026-10-31 |
 | E1 | Der automatische Reload ist während der Bearbeitung unterdrückt; Reload und Drucken sind dann deaktiviert. | 2026-10-31 |

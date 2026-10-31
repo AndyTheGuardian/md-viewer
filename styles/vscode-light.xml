@@ -30,4 +30,29 @@
   <style name="markdown:backslash-escape"  foreground="#ee0000"/>
   <style name="markdown:horizontal-rule"   foreground="#3b3b3b"/>
   <style name="markdown:line-break"        foreground="#3b3b3b"/>
+  <style name="mdviewer-markdown:quote"    foreground="#0451a5" italic="true"/>
+  <style name="mdviewer-markdown:code-fence" foreground="#800000"/>
+
+  <!-- Code in fenced blocks (same colours as HIGHLIGHT_CSS) -->
+  <style name="def:keyword"          foreground="#0000ff"/>
+  <style name="def:special-constant" foreground="#0000ff"/>
+  <style name="def:boolean"          foreground="#0000ff"/>
+  <style name="def:statement"        foreground="#af00db"/>
+  <style name="def:preprocessor"     foreground="#af00db"/>
+  <style name="def:function"         foreground="#795e26"/>
+  <style name="def:builtin"          foreground="#795e26"/>
+  <style name="def:type"             foreground="#267f99"/>
+  <style name="def:identifier"       foreground="#001080"/>
+  <style name="def:string"           foreground="#a31515"/>
+  <style name="def:character"        foreground="#a31515"/>
+  <style name="def:special-char"     foreground="#ee0000"/>
+  <style name="def:number"           foreground="#098658"/>
+  <style name="def:comment"          foreground="#008000" italic="true"/>
+  <style name="def:net-address"      foreground="#0070c1"/>
+  <style name="def:error"            underline="error" underline-color="#e51400"/>
+  <style name="xml:element-name"     foreground="#800000"/>
+  <style name="xml:attribute-name"   foreground="#e50000"/>
+  <style name="xml:attribute-value"  foreground="#0000ff"/>
+  <style name="diff:added-line"      foreground="#098658"/>
+  <style name="diff:removed-line"    foreground="#a31515"/>
 </style-scheme>
