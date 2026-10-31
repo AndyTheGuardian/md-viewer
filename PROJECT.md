@@ -12,6 +12,7 @@ A native Linux Mint viewer that opens `.md` files and displays them formatted li
   - "VS Code": formatted the way VS Code's Markdown preview does it.
 - *(Added 2026-10-27)* A theme switch with three choices: Follow system, Dark, Light.
 - *(Added 2026-10-31)* Editing in the code (Source) view, switched on with a button. Built with GtkSourceView, on the git branch `feature/source-editor`.
+- *(Added 2026-10-31)* Creating a new .md file.
 
 ## Files
 
@@ -106,6 +107,13 @@ The header bar has a linked toggle with three modes, in this order (changed on u
 - Unsaved changes: leaving the editor, switching the view, opening another file or closing the window asks "Save / Discard / Cancel" (`confirm_unsaved()`).
 - While editing, Reload and Print are disabled, and the automatic reload on file changes is suppressed, so it can't overwrite the text being edited.
 
+**New file**
+- The **New** button (or Ctrl+N) first asks where to save, using a save dialog that suggests `Untitled.md` and starts in the current file's folder.
+- It then creates the empty file and opens it in a new window, in Source view and already in edit mode (`ViewerApp.open_window(path, edit=True)`).
+  - A window that shows no file (the placeholder) is reused instead of opening a second one.
+- If the name has no Markdown suffix, `.md` is added. If a file with that name already exists, nothing is overwritten and an error is shown, because the dialog only confirmed overwriting the name without `.md`.
+- Choosing an existing name *with* the suffix asks the dialog's usual "Replace?" question; replacing empties that file.
+
 **Theme (Follow system / Light / Dark)**
 - The theme is chosen from the moon-icon menu button in the header bar.
   - It is a stateful app action, `app.theme`, shown as radio items.
@@ -156,7 +164,7 @@ The header bar has a linked toggle with three modes, in this order (changed on u
 
 **Window and controls**
 - Header bar:
-  - **Open** button.
+  - **New** and **Open** buttons.
   - Reload button.
   - View-mode toggle: Source, VS Code, Document.
   - Edit toggle (pencil) and, while editing, a Save button.
@@ -168,6 +176,7 @@ The header bar has a linked toggle with three modes, in this order (changed on u
 
   | Keys | Action |
   |---|---|
+  | Ctrl+N | New file |
   | Ctrl+O | Open |
   | Ctrl+P | Print |
   | F5 or Ctrl+R | Reload |
@@ -203,6 +212,11 @@ The header bar has a linked toggle with three modes, in this order (changed on u
   - An external file change while editing does not touch the buffer.
   - Cancel on a view switch keeps the editor and the view toggle; Save writes the file and switches; Discard leaves the file unchanged; Cancel on close keeps the window open.
   - CRLF files are saved with CRLF.
+- New file (2026-10-31), with a scripted GTK test (10 checks, all passed; the file dialog was stubbed):
+  - The suggested name is `Untitled.md`; a name without a suffix gets `.md`.
+  - The file is created empty; an empty window is reused, otherwise a second window opens, in Source view and editing.
+  - An existing `notes.md` is not overwritten when `notes` is entered; Cancel creates nothing.
+  - The edit-mode test still passes 18/18.
 - Testing gotcha: don't redirect `XDG_CONFIG_HOME` in tests. dconf reads the user's GSettings from there, so the app then sees default (light) desktop settings. Patch `md_viewer.CONFIG_FILE` instead.
 
 ## Ideas / possible changes (not done)
@@ -246,3 +260,4 @@ The header bar has a linked toggle with three modes, in this order (changed on u
     - The GtkSourceView editor in Source view, the edit toggle (Ctrl+E) and saving (Save button, Ctrl+S).
     - The Save / Discard / Cancel prompt for unsaved changes.
     - Reading files as bytes, so invalid UTF-8 and CRLF line ends are detected.
+  - User request: creating a new .md file. Added the New button (Ctrl+N): it asks for the location first, then opens the empty file in a new window, ready to edit.

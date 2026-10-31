@@ -504,6 +504,11 @@ class ViewerWindow(Gtk.ApplicationWindow):
         self.set_titlebar(header)
         self.header = header
 
+        new_btn = Gtk.Button.new_with_mnemonic("_New")
+        new_btn.set_tooltip_text("Create a new Markdown file (Ctrl+N)")
+        new_btn.connect("clicked", lambda *_: self.new_file())
+        header.pack_start(new_btn)
+
         open_btn = Gtk.Button.new_with_mnemonic("_Open")
         open_btn.set_tooltip_text("Open a Markdown file (Ctrl+O)")
         open_btn.connect("clicked", lambda *_: self.choose_file())
@@ -705,6 +710,7 @@ class ViewerWindow(Gtk.ApplicationWindow):
             self.render()  # the hidden page is stale, so take the position from the editor
         else:
             action.set_state(value)
+            self.update_controls()  # rerender() redraws later; the edit action must follow now
             self.rerender()
 
     # ---- editing ----------------------------------------------------------
@@ -809,11 +815,9 @@ class ViewerWindow(Gtk.ApplicationWindow):
 
     # ---- actions --------------------------------------------------------
 
-    def choose_file(self):
-        if not self.confirm_unsaved():
-            return
-        dialog = Gtk.FileChooserNative.new("Open Markdown file", self, Gtk.FileChooserAction.OPEN,
-                                           "_Open", "_Cancel")
+    def file_dialog(self, title, action, accept_label):
+        """A file chooser filtered to Markdown, starting in the current file's folder."""
+        dialog = Gtk.FileChooserNative.new(title, self, action, accept_label, "_Cancel")
         md_filter = Gtk.FileFilter()
         md_filter.set_name("Markdown files")
         for suffix in MD_SUFFIXES:
@@ -826,9 +830,37 @@ class ViewerWindow(Gtk.ApplicationWindow):
         dialog.add_filter(any_filter)
         if self.path:
             dialog.set_current_folder(os.path.dirname(self.path))
+        return dialog
+
+    def choose_file(self):
+        if not self.confirm_unsaved():
+            return
+        dialog = self.file_dialog("Open Markdown file", Gtk.FileChooserAction.OPEN, "_Open")
         if dialog.run() == Gtk.ResponseType.ACCEPT:
             self.open_file(dialog.get_filename())
         dialog.destroy()
+
+    def new_file(self):
+        """Ask where to create an empty Markdown file, then open it for editing."""
+        dialog = self.file_dialog("New Markdown file", Gtk.FileChooserAction.SAVE, "_Create")
+        dialog.set_do_overwrite_confirmation(True)
+        dialog.set_current_name("Untitled.md")
+        path = dialog.get_filename() if dialog.run() == Gtk.ResponseType.ACCEPT else None
+        dialog.destroy()
+        if path is None:
+            return
+        if not path.lower().endswith(MD_SUFFIXES):
+            path += ".md"
+            if os.path.exists(path):  # the dialog only confirmed overwriting the name without .md
+                self.error(f"Could not create {path}", "A file with this name already exists.")
+                return
+        try:
+            with open(path, "wb"):
+                pass
+        except OSError as e:
+            self.error(f"Could not create {path}", str(e))
+            return
+        self.get_application().open_window(path, edit=True, reuse=self if self.path is None else None)
 
     def print_document(self):
         if self.path and not self.editing:
@@ -845,6 +877,8 @@ class ViewerWindow(Gtk.ApplicationWindow):
         key = Gdk.keyval_name(event.keyval)
         if ctrl and key == "o":
             self.choose_file()
+        elif ctrl and key == "n":
+            self.new_file()
         elif ctrl and key == "p":
             self.print_document()
         elif ctrl and key == "s":
@@ -931,9 +965,17 @@ class ViewerApp(Gtk.Application):
 
     def do_open(self, files, _n_files, _hint):
         for f in files:
-            win = ViewerWindow(self)
-            win.show_all()
-            win.open_file(f.get_path())
+            self.open_window(f.get_path())
+
+    def open_window(self, path, edit=False, reuse=None):
+        """Show a file in a new window (or in `reuse`, an empty one), optionally ready to edit."""
+        win = reuse or ViewerWindow(self)
+        win.show_all()
+        win.open_file(path)
+        if edit and win.path == os.path.abspath(path):
+            win.lookup_action("view-mode").change_state(GLib.Variant.new_string("source"))
+            win.activate_action("edit", None)
+        win.present()
 
 
 if __name__ == "__main__":

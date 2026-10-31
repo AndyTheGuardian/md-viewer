@@ -12,6 +12,9 @@ Stand: 2026-10-31
 | E4 | Einschränkung | Dateien mit gemischten Zeilenenden (LF und CRLF) werden beim Speichern einheitlich mit CRLF geschrieben. | bekannt, akzeptiert |
 | E5 | Einschränkung | Dateien, die kein gültiges UTF-8 sind, können nicht bearbeitet werden: Der Bearbeiten-Button ist deaktiviert, damit beim Speichern keine Bytes verloren gehen. | bekannt, gewollt |
 | E6 | Einschränkung | Die Leseposition beim Wechsel zwischen Lesansicht und Editor wird nur näherungsweise übernommen (über den Anteil der Zeilen). | bekannt, akzeptiert |
+| A3 | Annahme | „Neue Datei“ öffnet ein neues Fenster. Zeigt das aktuelle Fenster aber gar keine Datei (Platzhalter), wird es wiederverwendet, statt ein leeres Fenster stehen zu lassen. | vom Anwender zu bestätigen |
+| E7 | Einschränkung | Wählt man bei „Neue Datei“ eine bestehende .md-Datei und bestätigt „Ersetzen“, wird diese geleert. | bekannt, akzeptiert (Standardverhalten des Dialogs) |
+| E8 | Einschränkung | Durch den zusätzlichen New-Button wird der Titel in der Kopfzeile bei schmalem Fenster früher abgeschnitten. | bekannt, akzeptiert |
 
 ## Erledigt
 
@@ -21,4 +24,5 @@ Stand: 2026-10-31
 | F5 | Git: Der Anwender hat `git init` freigegeben. `main` enthält den Stand vom 2026-10-27, die Funktion liegt auf dem Branch `feature/source-editor`. | 2026-10-31 |
 | F2–F4 | Speichern, ungespeicherte Änderungen, Button-Sichtbarkeit: nach Standardvorschlag umgesetzt, siehe Annahme A2. | 2026-10-31 |
 | A1 | „Code-Ansicht“ = Ansicht **Source** (so umgesetzt). | 2026-10-31 |
+| F6 | Neue Datei: Der Anwender hat entschieden, dass zuerst der Speicherort gewählt wird und die Datei in einem neuen Fenster öffnet. | 2026-10-31 |
 | E1 | Der automatische Reload ist während der Bearbeitung unterdrückt; Reload und Drucken sind dann deaktiviert. | 2026-10-31 |
