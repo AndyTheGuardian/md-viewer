@@ -53,7 +53,9 @@ CONFIG_FILE = os.path.join(GLib.get_user_config_dir(), "md-viewer", "settings.in
 
 EDITOR_FONT = '"Droid Sans Mono", "DejaVu Sans Mono", "Liberation Mono", monospace'
 EDITOR_FONT_PX = 14  # matches the Source view
-EDITOR_SCHEMES = {False: "classic", True: "oblivion"}  # GtkSourceView style scheme per dark theme
+# GtkSourceView style schemes per dark theme: VS Code colours from ./styles, else built-ins
+EDITOR_SCHEMES = {False: ("vscode-light", "classic"), True: ("vscode-dark", "oblivion")}
+STYLES_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "styles")
 
 VIEW_MODES = [("source", "Source", "Markdown source with syntax highlighting (Ctrl+1)"),
               ("vscode", "VS Code", "Formatted like the VS Code Markdown preview (Ctrl+2)"),
@@ -432,7 +434,10 @@ class SourceEditor(Gtk.ScrolledWindow):
         self.buffer = GtkSource.Buffer(language=language, highlight_syntax=True)
         self.view = GtkSource.View(buffer=self.buffer, show_line_numbers=True, auto_indent=True,
                                    highlight_current_line=True, tab_width=4,
-                                   wrap_mode=Gtk.WrapMode.WORD_CHAR, left_margin=8)
+                                   wrap_mode=Gtk.WrapMode.WORD_CHAR, left_margin=16,
+                                   top_margin=12, bottom_margin=12,
+                                   # 17 px font height + 2 = the Source view's 19 px lines
+                                   pixels_above_lines=1, pixels_below_lines=1)
         self.font_css = Gtk.CssProvider()
         self.view.get_style_context().add_provider(self.font_css,
                                                    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -469,8 +474,11 @@ class SourceEditor(Gtk.ScrolledWindow):
         return top.get_line() / max(1, self.buffer.get_line_count())
 
     def set_dark(self, dark):
-        scheme = GtkSource.StyleSchemeManager.get_default().get_scheme(EDITOR_SCHEMES[dark])
-        self.buffer.set_style_scheme(scheme)
+        manager = GtkSource.StyleSchemeManager.get_default()
+        if STYLES_DIR not in manager.get_search_path():
+            manager.append_search_path(STYLES_DIR)
+        preferred, fallback = EDITOR_SCHEMES[dark]
+        self.buffer.set_style_scheme(manager.get_scheme(preferred) or manager.get_scheme(fallback))
 
     def set_zoom(self, level):
         css = f"textview {{ font-family: {EDITOR_FONT}; font-size: {EDITOR_FONT_PX * level:.1f}px; }}"

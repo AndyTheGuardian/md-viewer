@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Editor colours of VS Code's Dark+ / Dark Modern theme, matching the read-only Source view (SOURCE_CSS). -->
+<style-scheme id="vscode-dark" name="VS Code Dark+" version="1.0">
+  <description>VS Code Dark+ colours for the Markdown Viewer editor</description>
+
+  <!-- Editor -->
+  <style name="text"                    foreground="#cccccc" background="#1f1f1f"/>
+  <style name="selection"               background="#264f78"/>
+  <style name="selection-unfocused"     background="#3a3d41"/>
+  <style name="cursor"                  foreground="#aeafad"/>
+  <style name="current-line"            background="#282828"/>
+  <style name="line-numbers"            foreground="#6e7681" background="#1f1f1f"/>
+  <style name="current-line-number"     foreground="#cccccc" background="#282828"/>
+  <style name="bracket-match"           background="#3a3d41"/>
+  <style name="search-match"            background="#623315"/>
+
+  <!-- Markdown -->
+  <style name="markdown:header"            foreground="#569cd6" bold="true"/>
+  <style name="markdown:list-marker"       foreground="#6796e6"/>
+  <style name="markdown:blockquote-marker" foreground="#6a9955"/>
+  <style name="markdown:code-span"         foreground="#ce9178"/>
+  <style name="markdown:code-block"        foreground="#ce9178"/>
+  <style name="markdown:link-text"         foreground="#ce9178"/>
+  <style name="markdown:label"             foreground="#ce9178"/>
+  <style name="markdown:image-marker"      foreground="#ce9178"/>
+  <style name="markdown:url"               foreground="#3794ff"/>
+  <style name="markdown:attribute-value"   foreground="#ce9178"/>
+  <style name="markdown:emphasis"          italic="true"/>
+  <style name="markdown:strong-emphasis"   bold="true"/>
+  <style name="markdown:backslash-escape"  foreground="#d7ba7d"/>
+  <style name="markdown:horizontal-rule"   foreground="#cccccc"/>
+  <style name="markdown:line-break"        foreground="#cccccc"/>
+</style-scheme>

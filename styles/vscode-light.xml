@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Editor colours of VS Code's Light+ / Light Modern theme, matching the read-only Source view (SOURCE_CSS). -->
+<style-scheme id="vscode-light" name="VS Code Light+" version="1.0">
+  <description>VS Code Light+ colours for the Markdown Viewer editor</description>
+
+  <!-- Editor -->
+  <style name="text"                    foreground="#3b3b3b" background="#ffffff"/>
+  <style name="selection"               background="#add6ff"/>
+  <style name="selection-unfocused"     background="#e5ebf1"/>
+  <style name="cursor"                  foreground="#000000"/>
+  <style name="current-line"            background="#f3f3f3"/>
+  <style name="line-numbers"            foreground="#6e7681" background="#ffffff"/>
+  <style name="current-line-number"     foreground="#171184" background="#f3f3f3"/>
+  <style name="bracket-match"           background="#e5e5e5"/>
+  <style name="search-match"            background="#a8ac94"/>
+
+  <!-- Markdown -->
+  <style name="markdown:header"            foreground="#800000" bold="true"/>
+  <style name="markdown:list-marker"       foreground="#0451a5"/>
+  <style name="markdown:blockquote-marker" foreground="#0451a5"/>
+  <style name="markdown:code-span"         foreground="#800000"/>
+  <style name="markdown:code-block"        foreground="#800000"/>
+  <style name="markdown:link-text"         foreground="#a31515"/>
+  <style name="markdown:label"             foreground="#a31515"/>
+  <style name="markdown:image-marker"      foreground="#a31515"/>
+  <style name="markdown:url"               foreground="#0070c1"/>
+  <style name="markdown:attribute-value"   foreground="#a31515"/>
+  <style name="markdown:emphasis"          italic="true"/>
+  <style name="markdown:strong-emphasis"   bold="true"/>
+  <style name="markdown:backslash-escape"  foreground="#ee0000"/>
+  <style name="markdown:horizontal-rule"   foreground="#3b3b3b"/>
+  <style name="markdown:line-break"        foreground="#3b3b3b"/>
+</style-scheme>

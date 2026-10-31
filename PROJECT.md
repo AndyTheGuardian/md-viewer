@@ -20,6 +20,7 @@ A native Linux Mint viewer that opens `.md` files and displays them formatted li
 |---|---|
 | `~/Claude/md-viewer/md_viewer.py` | The whole app (single file, executable) |
 | `~/Claude/md-viewer/PROJECT.md` | This file: project notes, kept up to date |
+| `~/Claude/md-viewer/styles/vscode-light.xml`, `vscode-dark.xml` | GtkSourceView style schemes with VS Code Light+ / Dark+ colours for the editor. They are found next to the script (`STYLES_DIR`, symlinks resolved). |
 | `~/Claude/md-viewer/OFFENE-PUNKTE.md` | Open questions, assumptions and known limitations (German, with IDs) |
 | `~/.config/md-viewer/settings.ini` | Saved preferences: `[viewer] theme=system\|light\|dark`. Created on the first change. The view mode is not saved. |
 | `~/.local/share/applications/markdown-viewer.desktop` | Menu launcher ("Markdown Viewer", Office category). It registers `text/markdown` and `text/x-markdown`, so the app shows up under "Open With" for .md files. No other app had claimed .md files, so `xdg-mime query default text/markdown` now returns this launcher, which means double-clicking an .md file opens it in the viewer. |
@@ -98,7 +99,10 @@ The header bar has a linked toggle with three modes, in this order (changed on u
   - It is a stateful boolean window action, `win.edit`. It is only enabled in Source view with a file open, and not for files that aren't valid UTF-8, because saving would lose their bytes.
   - The read-only WebView and the editor (`SourceEditor`, a `GtkSource.View` in a `Gtk.ScrolledWindow`) share a `Gtk.Stack`.
   - The editor has line numbers, Markdown highlighting from GtkSourceView's own `markdown.lang`, undo/redo (Ctrl+Z / Ctrl+Shift+Z), auto-indent and word wrap. It uses the same monospace font as the Source view.
-  - Colour schemes: `classic` for light, `oblivion` for dark (`EDITOR_SCHEMES`). They differ from the VS Code colours of the read-only view, because GtkSourceView ships no VS Code scheme.
+  - Colour schemes: the app's own `vscode-light` / `vscode-dark` from `styles/` (`EDITOR_SCHEMES`). They use the same colours as the read-only Source view (see the table above), plus VS Code's selection, cursor and current-line colours.
+    - If the `styles` folder is missing, the editor falls back to the built-in `classic` / `oblivion`.
+    - Line height (19 px) and top margin match the Source view, so lines sit at the same height in both.
+    - Differences that the colours can't fix, because GtkSourceView's `markdown.lang` doesn't mark them: quote *text* is not coloured (only the `>`), and code inside fenced blocks is one colour instead of being highlighted in its language.
   - The editor follows the zoom level by scaling its font with a CSS provider.
   - Entering and leaving the editor keeps the reading position (approximately, as a fraction of the lines).
 - Saving: the **Save** button (only shown while editing) or Ctrl+S.
@@ -260,4 +264,5 @@ The header bar has a linked toggle with three modes, in this order (changed on u
     - The GtkSourceView editor in Source view, the edit toggle (Ctrl+E) and saving (Save button, Ctrl+S).
     - The Save / Discard / Cancel prompt for unsaved changes.
     - Reading files as bytes, so invalid UTF-8 and CRLF line ends are detected.
+  - User request: VS Code highlight colours in the editor. Added the `vscode-light` / `vscode-dark` style schemes and matched the line height and margins. Compared against the Source view with screenshots in light and dark; both test scripts still pass.
   - User request: creating a new .md file. Added the New button (Ctrl+N): it asks for the location first, then opens the empty file in a new window, ready to edit.
