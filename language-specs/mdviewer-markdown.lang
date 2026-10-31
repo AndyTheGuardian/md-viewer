@@ -1,0 +1,467 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Markdown for the Markdown Viewer editor: GtkSourceView's own markdown.lang, plus
+  - fenced code blocks highlighted in their language (```python, ```js, ...), and
+  - block quotes whose text is coloured, not only the ">" marker,
+  so the editor looks like the read-only Source view.
+  Code inside a fence is highlighted line by line: a construct the embedded language leaves
+  open at the end of a line (a JS template string, a Python docstring) can then never
+  swallow the closing ```. The price: multi-line strings and comments are only coloured
+  on their first line.
+  Fence tags not listed here fall back to markdown.lang's one-colour code block.
+-->
+<language id="mdviewer-markdown" name="Markdown (Markdown Viewer)" version="2.0" _section="Markup" hidden="true">
+  <metadata>
+    <property name="globs">*.md;*.markdown;*.mdown;*.mkd</property>
+    <property name="block-comment-start">&lt;!--</property>
+    <property name="block-comment-end">--&gt;</property>
+  </metadata>
+
+  <styles>
+    <style id="code-fence" name="Code Fence" map-to="markdown:code-block"/>
+    <style id="quote" name="Quote Text" map-to="markdown:emphasis"/>
+  </styles>
+
+  <definitions>
+    <context id="fence-python3">
+      <start>^[ ]{0,3}```[ \t]*(?i:python|py|python3)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="python3:python3"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-js">
+      <start>^[ ]{0,3}```[ \t]*(?i:javascript|js|jsx|mjs)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="js:js"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-typescript">
+      <start>^[ ]{0,3}```[ \t]*(?i:typescript|ts|tsx)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="typescript:typescript"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-json">
+      <start>^[ ]{0,3}```[ \t]*(?i:json|jsonc)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="json:json"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-sh">
+      <start>^[ ]{0,3}```[ \t]*(?i:bash|sh|shell|zsh|console)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="sh:sh"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-c">
+      <start>^[ ]{0,3}```[ \t]*(?i:c|h)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="c:c"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-cpp">
+      <start>^[ ]{0,3}```[ \t]*(?i:cpp|c\+\+|cxx|hpp)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="cpp:cpp"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-c-sharp">
+      <start>^[ ]{0,3}```[ \t]*(?i:csharp|cs|c#)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="c-sharp:c-sharp"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-java">
+      <start>^[ ]{0,3}```[ \t]*(?i:java)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="java:java"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-kotlin">
+      <start>^[ ]{0,3}```[ \t]*(?i:kotlin|kt)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="kotlin:kotlin"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-swift">
+      <start>^[ ]{0,3}```[ \t]*(?i:swift)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="swift:swift"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-go">
+      <start>^[ ]{0,3}```[ \t]*(?i:go|golang)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="go:go"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-rust">
+      <start>^[ ]{0,3}```[ \t]*(?i:rust|rs)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="rust:rust"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-ruby">
+      <start>^[ ]{0,3}```[ \t]*(?i:ruby|rb)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="ruby:ruby"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-php">
+      <start>^[ ]{0,3}```[ \t]*(?i:php)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="php:php"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-perl">
+      <start>^[ ]{0,3}```[ \t]*(?i:perl|pl)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="perl:perl"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-lua">
+      <start>^[ ]{0,3}```[ \t]*(?i:lua)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="lua:lua"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-css">
+      <start>^[ ]{0,3}```[ \t]*(?i:css)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="css:css"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-html">
+      <start>^[ ]{0,3}```[ \t]*(?i:html|htm)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="html:html"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-xml">
+      <start>^[ ]{0,3}```[ \t]*(?i:xml|svg|xaml|csproj)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="xml:xml"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-yaml">
+      <start>^[ ]{0,3}```[ \t]*(?i:yaml|yml)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="yaml:yaml"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-toml">
+      <start>^[ ]{0,3}```[ \t]*(?i:toml)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="toml:toml"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-ini">
+      <start>^[ ]{0,3}```[ \t]*(?i:ini|cfg|conf)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="ini:ini"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-sql">
+      <start>^[ ]{0,3}```[ \t]*(?i:sql)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="sql:sql"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-diff">
+      <start>^[ ]{0,3}```[ \t]*(?i:diff|patch)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="diff:diff"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-makefile">
+      <start>^[ ]{0,3}```[ \t]*(?i:makefile|make)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="makefile:makefile"/>
+          </include>
+        </context>
+      </include>
+    </context>
+    <context id="fence-docker">
+      <start>^[ ]{0,3}```[ \t]*(?i:dockerfile|docker)([ \t{].*)?$</start>
+      <end>^[ ]{0,3}```[ \t]*$</end>
+      <include>
+        <context sub-pattern="0" where="start" style-ref="code-fence"/>
+        <context sub-pattern="0" where="end" style-ref="code-fence"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="docker:docker"/>
+          </include>
+        </context>
+      </include>
+    </context>
+
+    <!-- Like markdown:blockquote, but the whole line gets the quote style -->
+    <context id="blockquote" style-ref="quote" end-at-line-end="true">
+      <start>^( {0,3}&gt;(?=.)( {0,4}&gt;)*)</start>
+      <include>
+        <context sub-pattern="1" where="start" style-ref="markdown:blockquote-marker"/>
+        <context ref="markdown:1-backtick-code-span"/>
+        <context ref="markdown:2-backticks-code-span"/>
+        <context ref="markdown:automatic-link"/>
+        <context ref="markdown:inline-link"/>
+        <context ref="markdown:reference-link"/>
+        <context ref="markdown:inline-image"/>
+        <context ref="markdown:reference-image"/>
+        <context ref="markdown:underscores-emphasis"/>
+        <context ref="markdown:asterisks-emphasis"/>
+        <context ref="markdown:underscores-strong-emphasis"/>
+        <context ref="markdown:asterisks-strong-emphasis"/>
+        <context ref="markdown:backslash-escape"/>
+        <context ref="markdown:line-break"/>
+      </include>
+    </context>
+
+    <context id="mdviewer-markdown">
+      <include>
+        <!-- Listed before markdown.lang's rules, so they win where both match -->
+        <context ref="fence-python3"/>
+        <context ref="fence-js"/>
+        <context ref="fence-typescript"/>
+        <context ref="fence-json"/>
+        <context ref="fence-sh"/>
+        <context ref="fence-c"/>
+        <context ref="fence-cpp"/>
+        <context ref="fence-c-sharp"/>
+        <context ref="fence-java"/>
+        <context ref="fence-kotlin"/>
+        <context ref="fence-swift"/>
+        <context ref="fence-go"/>
+        <context ref="fence-rust"/>
+        <context ref="fence-ruby"/>
+        <context ref="fence-php"/>
+        <context ref="fence-perl"/>
+        <context ref="fence-lua"/>
+        <context ref="fence-css"/>
+        <context ref="fence-html"/>
+        <context ref="fence-xml"/>
+        <context ref="fence-yaml"/>
+        <context ref="fence-toml"/>
+        <context ref="fence-ini"/>
+        <context ref="fence-sql"/>
+        <context ref="fence-diff"/>
+        <context ref="fence-makefile"/>
+        <context ref="fence-docker"/>
+        <context ref="blockquote"/>
+        <context ref="markdown:markdown-syntax"/>
+        <context end-at-line-end="true">
+          <start>^(?![ ]{0,3}```[ \t]*$)(?=.)</start>
+          <include>
+            <context ref="html:html"/>
+          </include>
+        </context>
+      </include>
+    </context>
+  </definitions>
+</language>

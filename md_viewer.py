@@ -27,7 +27,8 @@ except ImportError:  # no syntax colouring; everything shows as plain text
 gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("WebKit2", "4.1")
-from gi.repository import Gdk, Gio, GLib, Gtk, WebKit2  # noqa: E402
+gi.require_version("GtkSource", "4")
+from gi.repository import Gdk, Gio, GLib, Gtk, GtkSource, WebKit2  # noqa: E402
 
 APP_NAME = "Markdown Viewer"
 
@@ -49,6 +50,22 @@ MD = MarkdownIt("commonmark", {"html": True, "highlight": highlight_code}).enabl
 MD_SUFFIXES = (".md", ".markdown", ".mdown", ".mkd")
 ZOOM_STEP = 0.1
 CONFIG_FILE = os.path.join(GLib.get_user_config_dir(), "md-viewer", "settings.ini")
+
+EDITOR_FONT = '"Droid Sans Mono", "DejaVu Sans Mono", "Liberation Mono", monospace'
+EDITOR_FONT_PX = 14  # matches the Source view
+# GtkSourceView style schemes per dark theme: VS Code colours from ./styles, else built-ins
+EDITOR_SCHEMES = {False: ("vscode-light", "classic"), True: ("vscode-dark", "oblivion")}
+STYLES_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "styles")
+# Markdown grammar from ./language-specs (fenced code in its language, coloured quotes), else built-in
+EDITOR_LANGUAGES = ("mdviewer-markdown", "markdown")
+LANGUAGE_SPECS_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "language-specs")
+
+
+def editor_language():
+    manager = GtkSource.LanguageManager.get_default()
+    if LANGUAGE_SPECS_DIR not in manager.get_search_path():
+        manager.set_search_path([LANGUAGE_SPECS_DIR, *manager.get_search_path()])
+    return next(filter(None, map(manager.get_language, EDITOR_LANGUAGES)))
 
 VIEW_MODES = [("source", "Source", "Markdown source with syntax highlighting (Ctrl+1)"),
               ("vscode", "VS Code", "Formatted like the VS Code Markdown preview (Ctrl+2)"),
@@ -334,6 +351,23 @@ def render_source(source):
     return "".join(f'<div class="line">{"".join(parts)}</div>' for parts in lines)
 
 
+def read_markdown(path):
+    """Read a file as (text with "\\n" line ends, original line end, decoded without loss)."""
+    with open(path, "rb") as f:
+        raw = f.read()
+    try:
+        text, lossless = raw.decode("utf-8"), True
+    except UnicodeDecodeError:
+        text, lossless = raw.decode("utf-8", errors="replace"), False
+    newline = "\r\n" if "\r\n" in text else "\n"
+    return text.replace("\r\n", "\n").replace("\r", "\n"), newline, lossless
+
+
+def encode_markdown(text, newline):
+    """The bytes to save: UTF-8 with the file's original line ends."""
+    return text.replace("\n", newline).encode("utf-8")
+
+
 def word_count(html_body):
     text = html.unescape(re.sub(r"<[^>]+>", " ", html_body))
     return len(re.findall(r"\w+", text))
@@ -401,12 +435,73 @@ class ThemeManager:
             self.gtk.props.gtk_application_prefer_dark_theme = self.choice == "dark"
 
 
+class SourceEditor(Gtk.ScrolledWindow):
+    """Editable Markdown source (GtkSourceView), shown in place of the read-only Source view."""
+
+    def __init__(self):
+        super().__init__()
+        self.buffer = GtkSource.Buffer(language=editor_language(), highlight_syntax=True)
+        self.view = GtkSource.View(buffer=self.buffer, show_line_numbers=True, auto_indent=True,
+                                   highlight_current_line=True, tab_width=4,
+                                   wrap_mode=Gtk.WrapMode.WORD_CHAR, left_margin=16,
+                                   top_margin=12, bottom_margin=12,
+                                   # 17 px font height + 2 = the Source view's 19 px lines
+                                   pixels_above_lines=1, pixels_below_lines=1)
+        self.font_css = Gtk.CssProvider()
+        self.view.get_style_context().add_provider(self.font_css,
+                                                   Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.set_zoom(1.0)
+        self.add(self.view)
+
+    @property
+    def text(self):
+        start, end = self.buffer.get_bounds()
+        return self.buffer.get_text(start, end, True)
+
+    @property
+    def modified(self):
+        return self.buffer.get_modified()
+
+    def load(self, text, fraction):
+        """Show text (not undoable) and scroll so the given fraction of it is at the top."""
+        self.buffer.begin_not_undoable_action()
+        self.buffer.set_text(text)
+        self.buffer.end_not_undoable_action()
+        self.buffer.set_modified(False)
+        line = int(fraction * self.buffer.get_line_count())
+        self.buffer.place_cursor(self.buffer.get_iter_at_line(line))
+        # Scroll once the new text has been laid out
+        GLib.idle_add(lambda: self.view.scroll_to_mark(self.buffer.get_insert(), 0, True, 0, 0) and False)
+        self.view.grab_focus()
+
+    def mark_saved(self):
+        self.buffer.set_modified(False)
+
+    def top_fraction(self):
+        """How far down the first visible line is, as a fraction of all lines."""
+        top, _ = self.view.get_line_at_y(self.view.get_visible_rect().y)
+        return top.get_line() / max(1, self.buffer.get_line_count())
+
+    def set_dark(self, dark):
+        manager = GtkSource.StyleSchemeManager.get_default()
+        if STYLES_DIR not in manager.get_search_path():
+            manager.append_search_path(STYLES_DIR)
+        preferred, fallback = EDITOR_SCHEMES[dark]
+        self.buffer.set_style_scheme(manager.get_scheme(preferred) or manager.get_scheme(fallback))
+
+    def set_zoom(self, level):
+        css = f"textview {{ font-family: {EDITOR_FONT}; font-size: {EDITOR_FONT_PX * level:.1f}px; }}"
+        self.font_css.load_from_data(css.encode())
+
+
 class ViewerWindow(Gtk.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app, title=APP_NAME)
         self.set_default_size(1000, 900)
         self.path = None
         self.source = None
+        self.newline = "\n"
+        self.lossless = True  # False if the file isn't valid UTF-8; saving would then lose bytes
         self.monitor = None
         self.restore_scroll = None
 
@@ -415,9 +510,21 @@ class ViewerWindow(Gtk.ApplicationWindow):
         mode_action.connect("change-state", self.on_view_mode)
         self.add_action(mode_action)
 
+        edit_action = Gio.SimpleAction.new_stateful("edit", None, GLib.Variant.new_boolean(False))
+        edit_action.connect("change-state", self.on_edit)
+        self.add_action(edit_action)
+        save_action = Gio.SimpleAction.new("save", None)
+        save_action.connect("activate", lambda *_: self.save())
+        self.add_action(save_action)
+
         header = Gtk.HeaderBar(show_close_button=True, title=APP_NAME)
         self.set_titlebar(header)
         self.header = header
+
+        new_btn = Gtk.Button.new_with_mnemonic("_New")
+        new_btn.set_tooltip_text("Create a new Markdown file (Ctrl+N)")
+        new_btn.connect("clicked", lambda *_: self.new_file())
+        header.pack_start(new_btn)
 
         open_btn = Gtk.Button.new_with_mnemonic("_Open")
         open_btn.set_tooltip_text("Open a Markdown file (Ctrl+O)")
@@ -434,6 +541,16 @@ class ViewerWindow(Gtk.ApplicationWindow):
             btn.set_detailed_action_name(f"win.view-mode::{key}")
             mode_box.pack_start(btn, False, False, 0)
         header.pack_start(mode_box)
+
+        self.edit_btn = Gtk.ToggleButton(action_name="win.edit")
+        self.edit_btn.add(Gtk.Image.new_from_icon_name("document-edit-symbolic", Gtk.IconSize.BUTTON))
+        header.pack_start(self.edit_btn)
+        # Text, not an icon: Mint-Y draws document-save as a download arrow
+        self.save_btn = Gtk.Button.new_with_mnemonic("_Save")
+        self.save_btn.set_action_name("win.save")
+        self.save_btn.set_tooltip_text("Save (Ctrl+S)")
+        self.save_btn.set_no_show_all(True)  # only shown while editing
+        header.pack_start(self.save_btn)
 
         self.print_btn = self.icon_button("document-print-symbolic", "Print / save as PDF (Ctrl+P)",
                                           self.print_document)
@@ -466,6 +583,12 @@ class ViewerWindow(Gtk.ApplicationWindow):
         self.webview.connect("load-changed", self.on_load_changed)
         self.webview.connect("context-menu", self.on_context_menu)
 
+        self.editor = SourceEditor()
+        self.editor.buffer.connect("modified-changed", lambda *_: self.update_title())
+        self.stack = Gtk.Stack()
+        self.stack.add(self.webview)
+        self.stack.add(self.editor)
+
         self.status = Gtk.Label(xalign=0)
         self.status.set_margin_start(10)
         self.status.set_margin_end(10)
@@ -473,12 +596,13 @@ class ViewerWindow(Gtk.ApplicationWindow):
         self.status.set_margin_bottom(3)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        box.pack_start(self.webview, True, True, 0)
+        box.pack_start(self.stack, True, True, 0)
         box.pack_start(Gtk.Separator(), False, False, 0)
         box.pack_start(self.status, False, False, 0)
         self.add(box)
 
         self.connect("key-press-event", self.on_key)
+        self.connect("delete-event", lambda *_: not self.confirm_unsaved())
         self.render()
 
     def icon_button(self, icon, tooltip, callback):
@@ -491,26 +615,37 @@ class ViewerWindow(Gtk.ApplicationWindow):
     def view_mode(self):
         return self.lookup_action("view-mode").get_state().get_string()
 
+    @property
+    def editing(self):
+        return self.lookup_action("edit").get_state().get_boolean()
+
     # ---- loading and rendering ------------------------------------------
 
     def open_file(self, path):
+        """Load and show a file; callers must have asked about unsaved edits first."""
         path = os.path.abspath(path)
         try:
-            with open(path, encoding="utf-8", errors="replace") as f:
-                self.source = f.read()
+            self.source, self.newline, self.lossless = read_markdown(path)
         except OSError as e:
             self.error(f"Could not open {path}", str(e))
             return
 
+        if self.editing:
+            self.stop_editing()
         if path != self.path:
             self.restore_scroll = None
             self.watch(path)
         self.path = path
-        title = os.path.basename(path)
-        self.header.set_title(title)
         self.header.set_subtitle(os.path.dirname(path))
-        self.set_title(f"{title} – {APP_NAME}")
+        self.update_title()
         self.render()
+
+    def update_title(self):
+        title = os.path.basename(self.path) if self.path else APP_NAME
+        if self.editing and self.editor.modified:
+            title = f"*{title}"
+        self.header.set_title(title)
+        self.set_title(f"{title} – {APP_NAME}" if self.path else APP_NAME)
 
     def render(self):
         """(Re)draw the page for the current file, view mode and theme."""
@@ -519,6 +654,7 @@ class ViewerWindow(Gtk.ApplicationWindow):
         rgba = Gdk.RGBA()
         rgba.parse(BACKGROUNDS[(mode, dark)])
         self.webview.set_background_color(rgba)
+        self.editor.set_dark(dark)
 
         if self.path is None:
             body, base, title = PLACEHOLDER, "file:///", APP_NAME
@@ -529,15 +665,30 @@ class ViewerWindow(Gtk.ApplicationWindow):
         page = PAGE_TEMPLATE.format(theme="dark" if dark else "light", title=html.escape(title),
                                     css=build_css(mode), body=body)
         self.webview.load_html(page, base)
+        self.update_status()
+        self.update_controls()
 
+    def update_status(self):
         if self.path is None:
             self.status.set_text("Ready")
         else:
-            words = word_count(render_markdown(self.source) if mode == "source" else body)
+            words = word_count(render_markdown(self.source))
             lines = self.source.count("\n") + 1
             self.status.set_text(f"{words:,} words    {lines:,} lines    {self.path}")
+
+    def update_controls(self):
+        """Enable the buttons that make sense for the current file, view and edit state."""
+        editing = self.editing
+        can_edit = self.path is not None and self.view_mode == "source" and self.lossless
+        self.lookup_action("edit").set_enabled(editing or can_edit)
+        self.lookup_action("save").set_enabled(editing)
+        self.save_btn.set_visible(editing)
+        if self.path is not None and not self.lossless:
+            self.edit_btn.set_tooltip_text("Can't edit: the file is not valid UTF-8")
+        else:
+            self.edit_btn.set_tooltip_text("Edit the source (Ctrl+E); only in Source view")
         for w in (self.reload_btn, self.print_btn):
-            w.set_sensitive(self.path is not None)
+            w.set_sensitive(self.path is not None and not editing)
 
     def rerender(self, from_disk=False):
         """Redraw while keeping the reading position (as a fraction, since layouts differ)."""
@@ -555,7 +706,7 @@ class ViewerWindow(Gtk.ApplicationWindow):
             self.render()
 
     def reload(self):
-        if self.path:
+        if self.path and not self.editing:  # never overwrite the text being edited
             self.rerender(from_disk=True)
 
     def on_load_changed(self, webview, event):
@@ -566,8 +717,79 @@ class ViewerWindow(Gtk.ApplicationWindow):
             self.restore_scroll = None
 
     def on_view_mode(self, action, value):
-        action.set_state(value)
-        self.rerender()
+        if value.equal(action.get_state()):
+            return
+        if self.editing:
+            if not self.confirm_unsaved():
+                return
+            self.stop_editing()
+            action.set_state(value)
+            self.render()  # the hidden page is stale, so take the position from the editor
+        else:
+            action.set_state(value)
+            self.update_controls()  # rerender() redraws later; the edit action must follow now
+            self.rerender()
+
+    # ---- editing ----------------------------------------------------------
+
+    def on_edit(self, action, value):
+        if value.get_boolean():
+            action.set_state(value)
+            js = "window.scrollY / Math.max(1, document.documentElement.scrollHeight - window.innerHeight)"
+            self.webview.evaluate_javascript(js, -1, None, None, None, self.start_editing, None)
+        elif self.confirm_unsaved():
+            self.stop_editing()
+            self.render()
+
+    def start_editing(self, webview, result, _data):
+        try:
+            fraction = webview.evaluate_javascript_finish(result).to_double()
+        except GLib.Error:
+            fraction = 0.0
+        self.stack.set_visible_child(self.editor)
+        self.editor.load(self.source, fraction)
+        self.update_title()
+        self.update_controls()
+
+    def stop_editing(self):
+        """Switch back to the page; unsaved edits are dropped, so ask first."""
+        self.lookup_action("edit").set_state(GLib.Variant.new_boolean(False))
+        self.restore_scroll = self.editor.top_fraction()
+        self.stack.set_visible_child(self.webview)
+        self.update_title()
+        self.update_controls()
+
+    def save(self):
+        """Write the edited text to the file; returns whether it worked."""
+        if not self.editing:
+            return False
+        text = self.editor.text
+        try:
+            with open(self.path, "wb") as f:
+                f.write(encode_markdown(text, self.newline))
+        except OSError as e:
+            self.error(f"Could not save {self.path}", str(e))
+            return False
+        self.source = text
+        self.editor.mark_saved()
+        self.update_status()
+        return True
+
+    def confirm_unsaved(self):
+        """Ask what to do with unsaved edits; returns False if the user cancelled."""
+        if not (self.editing and self.editor.modified):
+            return True
+        dialog = Gtk.MessageDialog(transient_for=self, message_type=Gtk.MessageType.QUESTION,
+                                   text=f"Save changes to {os.path.basename(self.path)}?")
+        dialog.format_secondary_text("Your changes will be lost if you don't save them.")
+        dialog.add_buttons("_Discard", Gtk.ResponseType.REJECT, "_Cancel", Gtk.ResponseType.CANCEL,
+                           "_Save", Gtk.ResponseType.ACCEPT)
+        dialog.set_default_response(Gtk.ResponseType.ACCEPT)
+        response = dialog.run()
+        dialog.destroy()
+        if response == Gtk.ResponseType.ACCEPT:
+            return self.save()
+        return response == Gtk.ResponseType.REJECT
 
     def watch(self, path):
         """Reload automatically whenever the file is saved by an editor."""
@@ -610,9 +832,9 @@ class ViewerWindow(Gtk.ApplicationWindow):
 
     # ---- actions --------------------------------------------------------
 
-    def choose_file(self):
-        dialog = Gtk.FileChooserNative.new("Open Markdown file", self, Gtk.FileChooserAction.OPEN,
-                                           "_Open", "_Cancel")
+    def file_dialog(self, title, action, accept_label):
+        """A file chooser filtered to Markdown, starting in the current file's folder."""
+        dialog = Gtk.FileChooserNative.new(title, self, action, accept_label, "_Cancel")
         md_filter = Gtk.FileFilter()
         md_filter.set_name("Markdown files")
         for suffix in MD_SUFFIXES:
@@ -625,17 +847,46 @@ class ViewerWindow(Gtk.ApplicationWindow):
         dialog.add_filter(any_filter)
         if self.path:
             dialog.set_current_folder(os.path.dirname(self.path))
+        return dialog
+
+    def choose_file(self):
+        if not self.confirm_unsaved():
+            return
+        dialog = self.file_dialog("Open Markdown file", Gtk.FileChooserAction.OPEN, "_Open")
         if dialog.run() == Gtk.ResponseType.ACCEPT:
             self.open_file(dialog.get_filename())
         dialog.destroy()
 
+    def new_file(self):
+        """Ask where to create an empty Markdown file, then open it for editing."""
+        dialog = self.file_dialog("New Markdown file", Gtk.FileChooserAction.SAVE, "_Create")
+        dialog.set_do_overwrite_confirmation(True)
+        dialog.set_current_name("Untitled.md")
+        path = dialog.get_filename() if dialog.run() == Gtk.ResponseType.ACCEPT else None
+        dialog.destroy()
+        if path is None:
+            return
+        if not path.lower().endswith(MD_SUFFIXES):
+            path += ".md"
+            if os.path.exists(path):  # the dialog only confirmed overwriting the name without .md
+                self.error(f"Could not create {path}", "A file with this name already exists.")
+                return
+        try:
+            with open(path, "wb"):
+                pass
+        except OSError as e:
+            self.error(f"Could not create {path}", str(e))
+            return
+        self.get_application().open_window(path, edit=True, reuse=self if self.path is None else None)
+
     def print_document(self):
-        if self.path:
+        if self.path and not self.editing:
             WebKit2.PrintOperation.new(self.webview).run_dialog(self)
 
     def zoom(self, step):
         level = 1.0 if step is None else min(max(self.webview.get_zoom_level() + step, 0.3), 3.0)
         self.webview.set_zoom_level(level)
+        self.editor.set_zoom(level)
         self.zoom_label.set_label(f"{round(level * 100)}%")
 
     def on_key(self, _widget, event):
@@ -643,8 +894,15 @@ class ViewerWindow(Gtk.ApplicationWindow):
         key = Gdk.keyval_name(event.keyval)
         if ctrl and key == "o":
             self.choose_file()
+        elif ctrl and key == "n":
+            self.new_file()
         elif ctrl and key == "p":
             self.print_document()
+        elif ctrl and key == "s":
+            self.save()
+        elif ctrl and key == "e":
+            if self.lookup_action("edit").get_enabled():
+                self.activate_action("edit", None)
         elif (ctrl and key == "r") or key == "F5":
             self.reload()
         elif ctrl and key in ("plus", "equal", "KP_Add"):
@@ -724,9 +982,17 @@ class ViewerApp(Gtk.Application):
 
     def do_open(self, files, _n_files, _hint):
         for f in files:
-            win = ViewerWindow(self)
-            win.show_all()
-            win.open_file(f.get_path())
+            self.open_window(f.get_path())
+
+    def open_window(self, path, edit=False, reuse=None):
+        """Show a file in a new window (or in `reuse`, an empty one), optionally ready to edit."""
+        win = reuse or ViewerWindow(self)
+        win.show_all()
+        win.open_file(path)
+        if edit and win.path == os.path.abspath(path):
+            win.lookup_action("view-mode").change_state(GLib.Variant.new_string("source"))
+            win.activate_action("edit", None)
+        win.present()
 
 
 if __name__ == "__main__":

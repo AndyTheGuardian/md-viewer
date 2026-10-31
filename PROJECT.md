@@ -11,6 +11,8 @@ A native Linux Mint viewer that opens `.md` files and displays them formatted li
   - "Source": normal, unformatted Markdown.
   - "VS Code": formatted the way VS Code's Markdown preview does it.
 - *(Added 2026-10-27)* A theme switch with three choices: Follow system, Dark, Light.
+- *(Added 2026-10-31)* Editing in the code (Source) view, switched on with a button. Built with GtkSourceView, on the git branch `feature/source-editor`.
+- *(Added 2026-10-31)* Creating a new .md file.
 
 ## Files
 
@@ -18,6 +20,9 @@ A native Linux Mint viewer that opens `.md` files and displays them formatted li
 |---|---|
 | `~/Claude/md-viewer/md_viewer.py` | The whole app (single file, executable) |
 | `~/Claude/md-viewer/PROJECT.md` | This file: project notes, kept up to date |
+| `~/Claude/md-viewer/styles/vscode-light.xml`, `vscode-dark.xml` | GtkSourceView style schemes with VS Code Light+ / Dark+ colours for the editor. They are found next to the script (`STYLES_DIR`, symlinks resolved). |
+| `~/Claude/md-viewer/language-specs/mdviewer-markdown.lang` | Extended Markdown grammar for the editor: GtkSourceView's `markdown.lang` plus fenced code in its language and coloured quote text. Found next to the script (`LANGUAGE_SPECS_DIR`). |
+| `~/Claude/md-viewer/OFFENE-PUNKTE.md` | Open questions, assumptions and known limitations (German, with IDs) |
 | `~/.config/md-viewer/settings.ini` | Saved preferences: `[viewer] theme=system\|light\|dark`. Created on the first change. The view mode is not saved. |
 | `~/.local/share/applications/markdown-viewer.desktop` | Menu launcher ("Markdown Viewer", Office category). It registers `text/markdown` and `text/x-markdown`, so the app shows up under "Open With" for .md files. No other app had claimed .md files, so `xdg-mime query default text/markdown` now returns this launcher, which means double-clicking an .md file opens it in the viewer. |
 
@@ -27,6 +32,7 @@ Run: `python3 ~/Claude/md-viewer/md_viewer.py [file.md ...]`
 
 - Python 3 + GTK 3 (PyGObject) for the window, header bar and file dialog.
 - WebKit2GTK 4.1 to display the rendered page.
+- GtkSourceView 4 (`GtkSource` 4, preinstalled with xed) for the editor in Source view.
 - `markdown-it-py` 3.0 (the `python3-markdown-it` package, preinstalled) as a CommonMark parser, with the `table` and `strikethrough` rules enabled and inline HTML allowed.
 - Tested on Linux Mint 22.3, which runs as a VM here without 3D acceleration.
 
@@ -89,6 +95,37 @@ The header bar has a linked toggle with three modes, in this order (changed on u
   - Colours and font match the VS Code editor (Droid Sans Mono / DejaVu Sans Mono, 14 px).
 - The status bar shows the word count (always of the rendered text), the line count and the path.
 
+**Editing in Source view**
+- The pencil toggle button in the header bar (or Ctrl+E) switches the Source view into an editor.
+  - It is a stateful boolean window action, `win.edit`. It is only enabled in Source view with a file open, and not for files that aren't valid UTF-8, because saving would lose their bytes.
+  - The read-only WebView and the editor (`SourceEditor`, a `GtkSource.View` in a `Gtk.ScrolledWindow`) share a `Gtk.Stack`.
+  - The editor has line numbers, Markdown highlighting, undo/redo (Ctrl+Z / Ctrl+Shift+Z), auto-indent and word wrap. It uses the same monospace font as the Source view.
+  - Colour schemes: the app's own `vscode-light` / `vscode-dark` from `styles/` (`EDITOR_SCHEMES`). They use the same colours as the read-only Source view (see the table above), plus VS Code's selection, cursor and current-line colours.
+    - If the `styles` folder is missing, the editor falls back to the built-in `classic` / `oblivion`.
+    - Line height (19 px) and top margin match the Source view, so lines sit at the same height in both.
+    - The schemes also hold the code colours of `HIGHLIGHT_CSS` (`def:keyword`, `def:string`, …) for code in fenced blocks.
+  - Grammar: the app's own `mdviewer-markdown` language (`language-specs/mdviewer-markdown.lang`, via `editor_language()`). It includes the built-in `markdown.lang` and adds:
+    - Block quotes coloured over the whole line (quote colour, italic), with the `>` in the marker colour, like the Source view.
+    - Fenced blocks highlighted in their language, for 27 languages, among them Python, JS/TS, JSON, shell, C/C++/C#, Java, Go, Rust, HTML/XML/CSS, YAML, TOML, SQL and diff. Fence tags are case-insensitive, with common aliases (`py`, `js`, `sh`, `cs`, …). Other tags fall back to the one-colour code block.
+    - Code in a fence is highlighted **line by line** (a context with `end-at-line-end`). Without that, a construct the embedded grammar leaves open swallowed the closing fence and the rest of the file. For example, the JS grammar reads the closing ```` ``` ```` as a template string. The cost: multi-line strings and comments are coloured only on their first line.
+    - If the `language-specs` folder is missing, the built-in `markdown` grammar is used.
+    - The grammar was generated once by a script (the fence blocks only differ in the language). To add a language, copy a `fence-*` block and add it to the include list.
+  - Remaining differences from the Source view: GtkSourceView doesn't mark plain identifiers (variables, class names), which Pygments colours as variables. Inline HTML is coloured as tags in the editor, but not in the Source view.
+  - The editor follows the zoom level by scaling its font with a CSS provider.
+  - Entering and leaving the editor keeps the reading position (approximately, as a fraction of the lines).
+- Saving: the **Save** button (only shown while editing) or Ctrl+S.
+  - Files are written as UTF-8 and keep their original line ends (`read_markdown()` / `encode_markdown()` detect and restore CRLF).
+  - Unsaved changes show as `*` in front of the title.
+- Unsaved changes: leaving the editor, switching the view, opening another file or closing the window asks "Save / Discard / Cancel" (`confirm_unsaved()`).
+- While editing, Reload and Print are disabled, and the automatic reload on file changes is suppressed, so it can't overwrite the text being edited.
+
+**New file**
+- The **New** button (or Ctrl+N) first asks where to save, using a save dialog that suggests `Untitled.md` and starts in the current file's folder.
+- It then creates the empty file and opens it in a new window, in Source view and already in edit mode (`ViewerApp.open_window(path, edit=True)`).
+  - A window that shows no file (the placeholder) is reused instead of opening a second one.
+- If the name has no Markdown suffix, `.md` is added. If a file with that name already exists, nothing is overwritten and an error is shown, because the dialog only confirmed overwriting the name without `.md`.
+- Choosing an existing name *with* the suffix asks the dialog's usual "Replace?" question; replacing empties that file.
+
 **Theme (Follow system / Light / Dark)**
 - The theme is chosen from the moon-icon menu button in the header bar.
   - It is a stateful app action, `app.theme`, shown as radio items.
@@ -139,9 +176,10 @@ The header bar has a linked toggle with three modes, in this order (changed on u
 
 **Window and controls**
 - Header bar:
-  - **Open** button.
+  - **New** and **Open** buttons.
   - Reload button.
   - View-mode toggle: Source, VS Code, Document.
+  - Edit toggle (pencil) and, while editing, a Save button.
   - Zoom −, a percentage button that resets zoom, and zoom +.
   - Theme menu: Follow system, Light, Dark.
   - Print button, for printing or saving as PDF.
@@ -150,11 +188,14 @@ The header bar has a linked toggle with three modes, in this order (changed on u
 
   | Keys | Action |
   |---|---|
+  | Ctrl+N | New file |
   | Ctrl+O | Open |
   | Ctrl+P | Print |
   | F5 or Ctrl+R | Reload |
   | Ctrl++ / Ctrl+− / Ctrl+0 | Zoom in / out / reset (30 % to 300 %) |
   | Ctrl+1 / Ctrl+2 / Ctrl+3 | Source / VS Code / Document view |
+  | Ctrl+E | Start / stop editing (Source view) |
+  | Ctrl+S | Save while editing |
   | Ctrl+W or Ctrl+Q | Close |
 
 - Ways to open a file: the file dialog (filtered to .md, .markdown, .mdown and .mkd), the command line, "Open With", or dragging a file onto the window.
@@ -177,6 +218,17 @@ The header bar has a linked toggle with three modes, in this order (changed on u
 - Checked that heading ids are generated correctly, including for duplicate headings.
 - Auto-reload: appending to the open file changed the word count from 65 to 70 without user action.
 - Screenshots of all 6 combinations (3 view modes × light/dark) were checked. The window chrome switched to `Mint-Y-Aqua` for Light and `Mint-Y-Dark-Aqua` for Dark.
+- Edit mode (2026-10-31), with a scripted GTK test (18 checks, all passed) and screenshots in light, dark and at 150 % zoom:
+  - Edit is enabled only in Source view, and not for an invalid-UTF-8 file.
+  - Save button visible and Reload/Print disabled while editing; `*` in the title when modified.
+  - An external file change while editing does not touch the buffer.
+  - Cancel on a view switch keeps the editor and the view toggle; Save writes the file and switches; Discard leaves the file unchanged; Cancel on close keeps the window open.
+  - CRLF files are saved with CRLF.
+- New file (2026-10-31), with a scripted GTK test (10 checks, all passed; the file dialog was stubbed):
+  - The suggested name is `Untitled.md`; a name without a suffix gets `.md`.
+  - The file is created empty; an empty window is reused, otherwise a second window opens, in Source view and editing.
+  - An existing `notes.md` is not overwritten when `notes` is entered; Cancel creates nothing.
+  - The edit-mode test still passes 18/18.
 - Testing gotcha: don't redirect `XDG_CONFIG_HOME` in tests. dconf reads the user's GSettings from there, so the app then sees default (light) desktop settings. Patch `md_viewer.CONFIG_FILE` instead.
 
 ## Ideas / possible changes (not done)
@@ -214,3 +266,14 @@ The header bar has a linked toggle with three modes, in this order (changed on u
     - The settings stay in `~/.config/md-viewer/`.
     - Replaced the deprecated `Gio.Settings.list_keys()` with `settings_schema.has_key()`.
     - Verified that the app still starts.
+- **2026-10-31**
+  - Put the project under git (`main` holds the state from 2026-10-27).
+  - User request: editing in the code view, switched on by a button. Added on branch `feature/source-editor`:
+    - The GtkSourceView editor in Source view, the edit toggle (Ctrl+E) and saving (Save button, Ctrl+S).
+    - The Save / Discard / Cancel prompt for unsaved changes.
+    - Reading files as bytes, so invalid UTF-8 and CRLF line ends are detected.
+  - User request: VS Code highlight colours in the editor. Added the `vscode-light` / `vscode-dark` style schemes and matched the line height and margins. Compared against the Source view with screenshots in light and dark; both test scripts still pass.
+  - User request: colour quote text and fenced code in the editor too. Added `language-specs/mdviewer-markdown.lang` and the code colours in both schemes.
+    - Fixed during testing: a JS block swallowed the rest of the file. The fix is the line-by-line highlighting described above.
+    - Compared with screenshots in light and dark (Python, JS, an unknown tag, a quote with inline markup, inline HTML); both test scripts still pass.
+  - User request: creating a new .md file. Added the New button (Ctrl+N): it asks for the location first, then opens the empty file in a new window, ready to edit.
