@@ -13,7 +13,7 @@ A native Linux Mint viewer that opens `.md` files and displays them formatted li
 - *(Added 2026-10-27)* A theme switch with three choices: Follow system, Dark, Light.
 - *(Added 2026-10-31)* Editing in the code (Source) view, switched on with a button. Built with GtkSourceView on the git branch `feature/source-editor`, merged into `main` on 2026-10-31.
 - *(Added 2026-10-31)* Creating a new .md file.
-- *(Added 2026-11-07)* Several files open at the same time in tabs. VS Code becomes the default view, the order becomes VS Code, Source, Document, and editing or creating a file switches to Source view automatically. Built on the git branch `feature/tabs`.
+- *(Added 2026-11-07)* Several files open at the same time in tabs. VS Code becomes the default view, the order becomes VS Code, Source, Document, and editing or creating a file switches to Source view automatically. Built on the git branch `feature/tabs`, merged into `main` on 2026-11-07.
 
 ## Files
 
