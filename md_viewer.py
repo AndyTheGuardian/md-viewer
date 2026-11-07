@@ -277,6 +277,14 @@ html.dark {
 
 PRINT_LIGHT = "@media print { html.dark { %s } }"
 
+# Dark GTK themes (Mint-Y-Dark) barely mark checked header-bar buttons, so the active view
+# and the edit toggle get a background about 10 % lighter than the bar.
+DARK_CHROME_CSS = b"""
+headerbar button:checked, headerbar button:checked:hover {
+  background-image: none; background-color: alpha(white, 0.10); box-shadow: none;
+}
+"""
+
 PAGE_TEMPLATE = """<!doctype html>
 <html class="{theme}"><head><meta charset="utf-8"><title>{title}</title>
 <style>{css}</style></head>
@@ -405,6 +413,9 @@ class ThemeManager:
             if s:
                 s.connect("changed", lambda *_: self.on_change())
         self.choice = "system"
+        self.chrome_css = Gtk.CssProvider()
+        Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), self.chrome_css,
+                                                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
     def system_theme(self):
         if self.desktop and self.desktop.props.settings_schema.has_key("gtk-theme"):
@@ -422,6 +433,7 @@ class ThemeManager:
 
     def apply(self):
         """Switch the app's own GTK theme to the light/dark variant of the system theme."""
+        self.chrome_css.load_from_data(DARK_CHROME_CSS if self.is_dark() else b"")
         name = self.system_theme()
         self.gtk.reset_property("gtk-theme-name")
         self.gtk.reset_property("gtk-application-prefer-dark-theme")

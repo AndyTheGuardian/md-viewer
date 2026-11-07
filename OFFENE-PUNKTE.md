@@ -15,8 +15,6 @@ Stand: 2026-11-07
 | E6 | Einschränkung | Die Leseposition beim Wechsel zwischen Lesansicht und Editor wird nur näherungsweise übernommen (über den Anteil der Zeilen). | bekannt, akzeptiert |
 | E7 | Einschränkung | Wählt man bei „Neue Datei“ eine bestehende .md-Datei und bestätigt „Ersetzen“, wird diese geleert. | bekannt, akzeptiert (Standardverhalten des Dialogs) |
 | E8 | Einschränkung | Durch den zusätzlichen New-Button wird der Titel in der Kopfzeile bei schmalem Fenster früher abgeschnitten. | bekannt, akzeptiert |
-| A4 | Annahme | Strg+W schließt jetzt den aktuellen Tab statt des Fensters (wie in Browsern und Editoren). Nur auf dem leeren Platzhalter schließt Strg+W das Fenster. Strg+Q schließt immer das Fenster. | vom Anwender zu bestätigen |
-| A5 | Annahme | Startet man die App aus dem Menü, während sie schon läuft, kommt das vorhandene Fenster nach vorn; ein zweites Fenster lässt sich derzeit nicht öffnen. | vom Anwender zu bestätigen |
 | E11 | Einschränkung | Alle Dateien laufen in einem Prozess (Single Instance). Stürzt die App ab, sind alle Tabs zu, und ungespeicherte Änderungen in allen Tabs gehen verloren. | bekannt, akzeptiert |
 | E12 | Einschränkung | Offene Tabs werden beim Beenden nicht gemerkt und beim nächsten Start nicht wiederhergestellt. | bekannt; ggf. später nachrüsten |
 | E13 | Einschränkung | Zieht man mehrere Dateien gleichzeitig ins Fenster, öffnet sich voraussichtlich nur die erste (WebKit verarbeitet nur eine Navigation). Nicht getestet. | ungeprüft |
@@ -34,3 +32,6 @@ Stand: 2026-11-07
 | A3 | „Neue Datei“ in einem neuen Fenster mit Wiederverwendung leerer Fenster: überholt; neue Dateien öffnen jetzt als Tab (F7). | 2026-11-07 |
 | F7 | Tabs: Der Anwender hat entschieden, dass von außen geöffnete Dateien (Doppelklick) als Tab im vorhandenen Fenster öffnen, „Open“ mehrere Dateien in neuen Tabs öffnet, Links in einem neuen Tab öffnen und Ansicht und Zoom pro Tab gelten. Außerdem: VS Code ist Standardansicht, Reihenfolge VS Code, Source, Document, und Bearbeiten bzw. Neue Datei wechseln automatisch in die Source-Ansicht. | 2026-11-07 |
 | E1 | Der automatische Reload ist während der Bearbeitung unterdrückt; Reload und Drucken sind dann deaktiviert. | 2026-10-31 |
+| A4 | Strg+W schließt den aktuellen Tab (auf dem leeren Platzhalter das Fenster), Strg+Q immer das Fenster: vom Anwender bestätigt. | 2026-11-07 |
+| A5 | Ein erneuter Start aus dem Menü holt das vorhandene Fenster nach vorn; kein zweites Fenster: vom Anwender bestätigt. | 2026-11-07 |
+| E14 | Im Dark Mode war der aktive Ansichts-Button kaum zu erkennen: Aktive Buttons der Kopfzeile sind jetzt ca. 10 % heller hinterlegt (nur im Dark Mode). | 2026-11-07 |

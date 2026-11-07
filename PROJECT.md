@@ -141,6 +141,7 @@ The header bar has a linked toggle with three modes, in this order (changed on u
   - Dark: `Mint-Y-Aqua` → `Mint-Y-Dark-Aqua`, or `<name>-Dark`.
   - This is only done if the variant is installed. Otherwise it falls back to `gtk-application-prefer-dark-theme`.
   - "Follow system" resets both overrides.
+  - In dark mode, checked header-bar buttons (the active view and the edit toggle) get a background about 10 % lighter than the bar (`DARK_CHROME_CSS`, `alpha(white, 0.10)`), because Mint-Y-Dark barely marks them. The CSS provider is loaded for dark and emptied for light, so the light theme keeps its own look.
 - How the system theme is detected:
   - The theme name comes from `org.cinnamon.desktop.interface gtk-theme`, falling back to GNOME's.
   - The system counts as dark if that name contains "dark", or if `org.x.apps.portal` or `org.gnome.desktop.interface` `color-scheme` is `prefer-dark`.
@@ -310,3 +311,4 @@ The header bar has a linked toggle with three modes, in this order (changed on u
     - Single-instance app; files opened later become tabs. Open allows multiple selection; links open new tabs; view mode and zoom are per tab.
     - Edit is now enabled in every view and switches to Source; New opens a tab instead of a window.
     - New tab shortcuts (Ctrl+Tab, Ctrl+PgUp/PgDn); Ctrl+W now closes the tab, Ctrl+Q the window.
+  - User request: in dark mode the active view button couldn't be told apart. Checked header-bar buttons now get a background about 10 % lighter in dark mode. Verified with header screenshots in dark and light (reading and editing); the tabs test still passes 29/29.
