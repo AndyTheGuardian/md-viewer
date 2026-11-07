@@ -28,7 +28,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("WebKit2", "4.1")
 gi.require_version("GtkSource", "4")
-from gi.repository import Gdk, Gio, GLib, Gtk, GtkSource, WebKit2  # noqa: E402
+from gi.repository import Gdk, Gio, GLib, GObject, Gtk, GtkSource, WebKit2  # noqa: E402
 
 APP_NAME = "Markdown Viewer"
 
@@ -67,10 +67,13 @@ def editor_language():
         manager.set_search_path([LANGUAGE_SPECS_DIR, *manager.get_search_path()])
     return next(filter(None, map(manager.get_language, EDITOR_LANGUAGES)))
 
-VIEW_MODES = [("source", "Source", "Markdown source with syntax highlighting (Ctrl+1)"),
-              ("vscode", "VS Code", "Formatted like the VS Code Markdown preview (Ctrl+2)"),
+VIEW_MODES = [("vscode", "VS Code", "Formatted like the VS Code Markdown preview (Ctrl+1)"),
+              ("source", "Source", "Markdown source with syntax highlighting (Ctrl+2)"),
               ("document", "Document", "Formatted like a Word document (Ctrl+3)")]
-DEFAULT_VIEW_MODE = "source"  # every window opens in this view
+DEFAULT_VIEW_MODE = "vscode"  # every tab opens in this view
+EDIT_VIEW_MODE = "source"     # editing always happens here
+APP_ID = "local.MarkdownViewer"  # single instance: files opened later become tabs in it
+SCROLL_FRACTION_JS = "window.scrollY / Math.max(1, document.documentElement.scrollHeight - window.innerHeight)"
 THEMES = [("system", "Follow system"), ("light", "Light"), ("dark", "Dark")]
 
 # Every stylesheet defines its colours as variables on :root (light) and
@@ -494,86 +497,36 @@ class SourceEditor(Gtk.ScrolledWindow):
         self.font_css.load_from_data(css.encode())
 
 
-class ViewerWindow(Gtk.ApplicationWindow):
+def show_error(parent, title, detail):
+    dialog = Gtk.MessageDialog(transient_for=parent, message_type=Gtk.MessageType.ERROR,
+                               buttons=Gtk.ButtonsType.CLOSE, text=title)
+    dialog.format_secondary_text(detail)
+    dialog.run()
+    dialog.destroy()
+
+
+class DocumentTab(Gtk.Box):
+    """One open file: its rendered page, the source editor and the file's state.
+
+    Each tab has its own view mode and zoom. The window shows whatever the current tab
+    reports and hears about every change through the "changed" signal."""
+
+    __gsignals__ = {
+        "changed": (GObject.SignalFlags.RUN_FIRST, None, ()),
+        "open-file": (GObject.SignalFlags.RUN_FIRST, None, (str,)),  # a linked or dropped .md file
+    }
+
     def __init__(self, app):
-        super().__init__(application=app, title=APP_NAME)
-        self.set_default_size(1000, 900)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL)
+        self.app = app
         self.path = None
         self.source = None
         self.newline = "\n"
         self.lossless = True  # False if the file isn't valid UTF-8; saving would then lose bytes
         self.monitor = None
         self.restore_scroll = None
-
-        mode_action = Gio.SimpleAction.new_stateful(
-            "view-mode", GLib.VariantType.new("s"), GLib.Variant.new_string(DEFAULT_VIEW_MODE))
-        mode_action.connect("change-state", self.on_view_mode)
-        self.add_action(mode_action)
-
-        edit_action = Gio.SimpleAction.new_stateful("edit", None, GLib.Variant.new_boolean(False))
-        edit_action.connect("change-state", self.on_edit)
-        self.add_action(edit_action)
-        save_action = Gio.SimpleAction.new("save", None)
-        save_action.connect("activate", lambda *_: self.save())
-        self.add_action(save_action)
-
-        header = Gtk.HeaderBar(show_close_button=True, title=APP_NAME)
-        self.set_titlebar(header)
-        self.header = header
-
-        new_btn = Gtk.Button.new_with_mnemonic("_New")
-        new_btn.set_tooltip_text("Create a new Markdown file (Ctrl+N)")
-        new_btn.connect("clicked", lambda *_: self.new_file())
-        header.pack_start(new_btn)
-
-        open_btn = Gtk.Button.new_with_mnemonic("_Open")
-        open_btn.set_tooltip_text("Open a Markdown file (Ctrl+O)")
-        open_btn.connect("clicked", lambda *_: self.choose_file())
-        header.pack_start(open_btn)
-
-        self.reload_btn = self.icon_button("view-refresh-symbolic", "Reload (F5)", self.reload)
-        header.pack_start(self.reload_btn)
-
-        mode_box = Gtk.Box()
-        mode_box.get_style_context().add_class("linked")
-        for key, label, tooltip in VIEW_MODES:
-            btn = Gtk.ToggleButton(label=label, tooltip_text=tooltip)
-            btn.set_detailed_action_name(f"win.view-mode::{key}")
-            mode_box.pack_start(btn, False, False, 0)
-        header.pack_start(mode_box)
-
-        self.edit_btn = Gtk.ToggleButton(action_name="win.edit")
-        self.edit_btn.add(Gtk.Image.new_from_icon_name("document-edit-symbolic", Gtk.IconSize.BUTTON))
-        header.pack_start(self.edit_btn)
-        # Text, not an icon: Mint-Y draws document-save as a download arrow
-        self.save_btn = Gtk.Button.new_with_mnemonic("_Save")
-        self.save_btn.set_action_name("win.save")
-        self.save_btn.set_tooltip_text("Save (Ctrl+S)")
-        self.save_btn.set_no_show_all(True)  # only shown while editing
-        header.pack_start(self.save_btn)
-
-        self.print_btn = self.icon_button("document-print-symbolic", "Print / save as PDF (Ctrl+P)",
-                                          self.print_document)
-        header.pack_end(self.print_btn)
-
-        theme_menu = Gio.Menu()
-        for key, label in THEMES:
-            theme_menu.append(label, f"app.theme::{key}")
-        theme_btn = Gtk.MenuButton(menu_model=theme_menu, tooltip_text="Theme")
-        theme_btn.add(Gtk.Image.new_from_icon_name("weather-clear-night-symbolic", Gtk.IconSize.BUTTON))
-        header.pack_end(theme_btn)
-
-        zoom_box = Gtk.Box()
-        zoom_box.get_style_context().add_class("linked")
-        zoom_box.pack_start(self.icon_button("zoom-out-symbolic", "Zoom out (Ctrl+-)",
-                                             lambda: self.zoom(-ZOOM_STEP)), False, False, 0)
-        self.zoom_label = Gtk.Button(label="100%")
-        self.zoom_label.set_tooltip_text("Reset zoom (Ctrl+0)")
-        self.zoom_label.connect("clicked", lambda *_: self.zoom(None))
-        zoom_box.pack_start(self.zoom_label, False, False, 0)
-        zoom_box.pack_start(self.icon_button("zoom-in-symbolic", "Zoom in (Ctrl++)",
-                                             lambda: self.zoom(ZOOM_STEP)), False, False, 0)
-        header.pack_end(zoom_box)
+        self.view_mode = DEFAULT_VIEW_MODE
+        self.editing = False
 
         settings = WebKit2.Settings()
         settings.set_enable_javascript_markup(False)  # never run scripts from documents
@@ -584,51 +537,52 @@ class ViewerWindow(Gtk.ApplicationWindow):
         self.webview.connect("context-menu", self.on_context_menu)
 
         self.editor = SourceEditor()
-        self.editor.buffer.connect("modified-changed", lambda *_: self.update_title())
+        self.editor.buffer.connect("modified-changed", lambda *_: self.emit("changed"))
         self.stack = Gtk.Stack()
         self.stack.add(self.webview)
         self.stack.add(self.editor)
-
-        self.status = Gtk.Label(xalign=0)
-        self.status.set_margin_start(10)
-        self.status.set_margin_end(10)
-        self.status.set_margin_top(3)
-        self.status.set_margin_bottom(3)
-
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        box.pack_start(self.stack, True, True, 0)
-        box.pack_start(Gtk.Separator(), False, False, 0)
-        box.pack_start(self.status, False, False, 0)
-        self.add(box)
-
-        self.connect("key-press-event", self.on_key)
-        self.connect("delete-event", lambda *_: not self.confirm_unsaved())
+        self.pack_start(self.stack, True, True, 0)
         self.render()
 
-    def icon_button(self, icon, tooltip, callback):
-        btn = Gtk.Button.new_from_icon_name(icon, Gtk.IconSize.BUTTON)
-        btn.set_tooltip_text(tooltip)
-        btn.connect("clicked", lambda *_: callback())
-        return btn
+    @property
+    def title(self):
+        return os.path.basename(self.path) if self.path else "No document"
 
     @property
-    def view_mode(self):
-        return self.lookup_action("view-mode").get_state().get_string()
+    def modified(self):
+        return self.editing and self.editor.modified
 
     @property
-    def editing(self):
-        return self.lookup_action("edit").get_state().get_boolean()
+    def can_edit(self):
+        return self.path is not None and self.lossless
+
+    @property
+    def zoom_level(self):
+        return self.webview.get_zoom_level()
+
+    @property
+    def status_text(self):
+        if self.path is None:
+            return "Ready"
+        words = word_count(render_markdown(self.source))
+        lines = self.source.count("\n") + 1
+        return f"{words:,} words    {lines:,} lines    {self.path}"
+
+    @property
+    def parent_window(self):
+        top = self.get_toplevel()
+        return top if isinstance(top, Gtk.Window) else None
 
     # ---- loading and rendering ------------------------------------------
 
     def open_file(self, path):
-        """Load and show a file; callers must have asked about unsaved edits first."""
+        """Load and show a file; returns whether it worked."""
         path = os.path.abspath(path)
         try:
             self.source, self.newline, self.lossless = read_markdown(path)
         except OSError as e:
-            self.error(f"Could not open {path}", str(e))
-            return
+            show_error(self.parent_window, f"Could not open {path}", str(e))
+            return False
 
         if self.editing:
             self.stop_editing()
@@ -636,64 +590,32 @@ class ViewerWindow(Gtk.ApplicationWindow):
             self.restore_scroll = None
             self.watch(path)
         self.path = path
-        self.header.set_subtitle(os.path.dirname(path))
-        self.update_title()
         self.render()
-
-    def update_title(self):
-        title = os.path.basename(self.path) if self.path else APP_NAME
-        if self.editing and self.editor.modified:
-            title = f"*{title}"
-        self.header.set_title(title)
-        self.set_title(f"{title} – {APP_NAME}" if self.path else APP_NAME)
+        return True
 
     def render(self):
         """(Re)draw the page for the current file, view mode and theme."""
         mode = self.view_mode
-        dark = self.get_application().themes.is_dark()
+        dark = self.app.themes.is_dark()
         rgba = Gdk.RGBA()
         rgba.parse(BACKGROUNDS[(mode, dark)])
         self.webview.set_background_color(rgba)
         self.editor.set_dark(dark)
 
         if self.path is None:
-            body, base, title = PLACEHOLDER, "file:///", APP_NAME
+            body, base = PLACEHOLDER, "file:///"
         else:
             body = render_source(self.source) if mode == "source" else render_markdown(self.source)
             base = Gio.File.new_for_path(self.path).get_uri()
-            title = os.path.basename(self.path)
-        page = PAGE_TEMPLATE.format(theme="dark" if dark else "light", title=html.escape(title),
+        page = PAGE_TEMPLATE.format(theme="dark" if dark else "light", title=html.escape(self.title),
                                     css=build_css(mode), body=body)
         self.webview.load_html(page, base)
-        self.update_status()
-        self.update_controls()
-
-    def update_status(self):
-        if self.path is None:
-            self.status.set_text("Ready")
-        else:
-            words = word_count(render_markdown(self.source))
-            lines = self.source.count("\n") + 1
-            self.status.set_text(f"{words:,} words    {lines:,} lines    {self.path}")
-
-    def update_controls(self):
-        """Enable the buttons that make sense for the current file, view and edit state."""
-        editing = self.editing
-        can_edit = self.path is not None and self.view_mode == "source" and self.lossless
-        self.lookup_action("edit").set_enabled(editing or can_edit)
-        self.lookup_action("save").set_enabled(editing)
-        self.save_btn.set_visible(editing)
-        if self.path is not None and not self.lossless:
-            self.edit_btn.set_tooltip_text("Can't edit: the file is not valid UTF-8")
-        else:
-            self.edit_btn.set_tooltip_text("Edit the source (Ctrl+E); only in Source view")
-        for w in (self.reload_btn, self.print_btn):
-            w.set_sensitive(self.path is not None and not editing)
+        self.emit("changed")
 
     def rerender(self, from_disk=False):
         """Redraw while keeping the reading position (as a fraction, since layouts differ)."""
-        js = "window.scrollY / Math.max(1, document.documentElement.scrollHeight - window.innerHeight)"
-        self.webview.evaluate_javascript(js, -1, None, None, None, self.on_scroll_read, from_disk)
+        self.webview.evaluate_javascript(SCROLL_FRACTION_JS, -1, None, None, None,
+                                         self.on_scroll_read, from_disk)
 
     def on_scroll_read(self, webview, result, from_disk):
         try:
@@ -716,48 +638,67 @@ class ViewerWindow(Gtk.ApplicationWindow):
             webview.evaluate_javascript(js, -1, None, None, None, None, None)
             self.restore_scroll = None
 
-    def on_view_mode(self, action, value):
-        if value.equal(action.get_state()):
+    def set_view_mode(self, mode):
+        """Switch the view; leaving Source view ends editing, after asking about unsaved edits."""
+        if mode == self.view_mode:
             return
         if self.editing:
             if not self.confirm_unsaved():
                 return
             self.stop_editing()
-            action.set_state(value)
+            self.view_mode = mode
             self.render()  # the hidden page is stale, so take the position from the editor
         else:
-            action.set_state(value)
-            self.update_controls()  # rerender() redraws later; the edit action must follow now
+            self.view_mode = mode
+            self.emit("changed")  # rerender() redraws later; the buttons must follow now
             self.rerender()
+
+    def zoom(self, step):
+        level = 1.0 if step is None else min(max(self.zoom_level + step, 0.3), 3.0)
+        self.webview.set_zoom_level(level)
+        self.editor.set_zoom(level)
+        self.emit("changed")
+
+    def print_document(self):
+        if self.path and not self.editing:
+            WebKit2.PrintOperation.new(self.webview).run_dialog(self.parent_window)
 
     # ---- editing ----------------------------------------------------------
 
-    def on_edit(self, action, value):
-        if value.get_boolean():
-            action.set_state(value)
-            js = "window.scrollY / Math.max(1, document.documentElement.scrollHeight - window.innerHeight)"
-            self.webview.evaluate_javascript(js, -1, None, None, None, self.start_editing, None)
+    def set_editing(self, editing):
+        """Start editing (switching to Source view) or stop it, asking about unsaved edits."""
+        if editing == self.editing or (editing and not self.can_edit):
+            return
+        if editing:
+            self.editing = True
+            self.webview.evaluate_javascript(SCROLL_FRACTION_JS, -1, None, None, None,
+                                             self.on_edit_position, None)
         elif self.confirm_unsaved():
             self.stop_editing()
             self.render()
+        self.emit("changed")
 
-    def start_editing(self, webview, result, _data):
+    def on_edit_position(self, webview, result, _data):
         try:
             fraction = webview.evaluate_javascript_finish(result).to_double()
         except GLib.Error:
             fraction = 0.0
+        if not self.editing:  # stopped again before the position arrived
+            return
+        if self.view_mode != EDIT_VIEW_MODE:
+            self.view_mode = EDIT_VIEW_MODE
+            self.restore_scroll = fraction
+            self.render()
         self.stack.set_visible_child(self.editor)
         self.editor.load(self.source, fraction)
-        self.update_title()
-        self.update_controls()
+        self.emit("changed")
 
     def stop_editing(self):
         """Switch back to the page; unsaved edits are dropped, so ask first."""
-        self.lookup_action("edit").set_state(GLib.Variant.new_boolean(False))
+        self.editing = False
         self.restore_scroll = self.editor.top_fraction()
         self.stack.set_visible_child(self.webview)
-        self.update_title()
-        self.update_controls()
+        self.emit("changed")
 
     def save(self):
         """Write the edited text to the file; returns whether it worked."""
@@ -768,19 +709,20 @@ class ViewerWindow(Gtk.ApplicationWindow):
             with open(self.path, "wb") as f:
                 f.write(encode_markdown(text, self.newline))
         except OSError as e:
-            self.error(f"Could not save {self.path}", str(e))
+            show_error(self.parent_window, f"Could not save {self.path}", str(e))
             return False
         self.source = text
         self.editor.mark_saved()
-        self.update_status()
+        self.emit("changed")
         return True
 
     def confirm_unsaved(self):
         """Ask what to do with unsaved edits; returns False if the user cancelled."""
-        if not (self.editing and self.editor.modified):
+        if not self.modified:
             return True
-        dialog = Gtk.MessageDialog(transient_for=self, message_type=Gtk.MessageType.QUESTION,
-                                   text=f"Save changes to {os.path.basename(self.path)}?")
+        dialog = Gtk.MessageDialog(transient_for=self.parent_window,
+                                   message_type=Gtk.MessageType.QUESTION,
+                                   text=f"Save changes to {self.title}?")
         dialog.format_secondary_text("Your changes will be lost if you don't save them.")
         dialog.add_buttons("_Discard", Gtk.ResponseType.REJECT, "_Cancel", Gtk.ResponseType.CANCEL,
                            "_Save", Gtk.ResponseType.ACCEPT)
@@ -791,18 +733,22 @@ class ViewerWindow(Gtk.ApplicationWindow):
             return self.save()
         return response == Gtk.ResponseType.REJECT
 
+    # ---- file watching, links and drops -----------------------------------
+
     def watch(self, path):
         """Reload automatically whenever the file is saved by an editor."""
-        if self.monitor:
-            self.monitor.cancel()
+        self.stop_watching()
         self.monitor = Gio.File.new_for_path(path).monitor_file(Gio.FileMonitorFlags.NONE, None)
         self.monitor.connect("changed", self.on_file_changed)
+
+    def stop_watching(self):
+        if self.monitor:
+            self.monitor.cancel()
+            self.monitor = None
 
     def on_file_changed(self, _monitor, _file, _other, event):
         if event in (Gio.FileMonitorEvent.CHANGES_DONE_HINT, Gio.FileMonitorEvent.CREATED):
             self.reload()
-
-    # ---- links and drops --------------------------------------------------
 
     def on_decide_policy(self, _webview, decision, decision_type):
         if decision_type != WebKit2.PolicyDecisionType.NAVIGATION_ACTION:
@@ -815,9 +761,9 @@ class ViewerWindow(Gtk.ApplicationWindow):
 
         decision.ignore()
         if parsed.scheme == "file" and parsed.path.lower().endswith(MD_SUFFIXES):
-            self.open_file(unquote(parsed.path))  # linked or dropped Markdown file
+            self.emit("open-file", unquote(parsed.path))  # linked or dropped Markdown file
         else:
-            Gtk.show_uri_on_window(self, uri, Gdk.CURRENT_TIME)
+            Gtk.show_uri_on_window(self.parent_window, uri, Gdk.CURRENT_TIME)
         return True
 
     def on_context_menu(self, _webview, menu, _event, _hit):
@@ -828,6 +774,233 @@ class ViewerWindow(Gtk.ApplicationWindow):
         for item in list(menu.get_items()):
             if item.get_stock_action() in browser_only:
                 menu.remove(item)
+        return False
+
+
+class TabLabel(Gtk.Box):
+    """A tab's header: the file name (with * while modified) and a close button."""
+
+    def __init__(self, on_close):
+        super().__init__(spacing=4)
+        self.label = Gtk.Label()
+        close_btn = Gtk.Button.new_from_icon_name("window-close-symbolic", Gtk.IconSize.MENU)
+        close_btn.set_relief(Gtk.ReliefStyle.NONE)
+        close_btn.set_focus_on_click(False)
+        close_btn.set_tooltip_text("Close tab (Ctrl+W)")
+        close_btn.connect("clicked", lambda *_: on_close())
+        self.pack_start(self.label, True, True, 0)
+        self.pack_start(close_btn, False, False, 0)
+        self.show_all()
+
+    def update(self, tab):
+        self.label.set_text(f"*{tab.title}" if tab.modified else tab.title)
+        self.set_tooltip_text(tab.path or "")
+
+
+class ViewerWindow(Gtk.ApplicationWindow):
+    """A window with one tab per open file; the header bar and status bar follow the current tab."""
+
+    def __init__(self, app):
+        super().__init__(application=app, title=APP_NAME)
+        self.set_default_size(1000, 900)
+
+        # The actions only mirror the current tab's state (see sync()) and pass changes on to it
+        mode_action = Gio.SimpleAction.new_stateful(
+            "view-mode", GLib.VariantType.new("s"), GLib.Variant.new_string(DEFAULT_VIEW_MODE))
+        mode_action.connect("change-state", lambda _a, value: self.tab.set_view_mode(value.get_string()))
+        self.add_action(mode_action)
+        edit_action = Gio.SimpleAction.new_stateful("edit", None, GLib.Variant.new_boolean(False))
+        edit_action.connect("change-state", lambda _a, value: self.tab.set_editing(value.get_boolean()))
+        self.add_action(edit_action)
+        save_action = Gio.SimpleAction.new("save", None)
+        save_action.connect("activate", lambda *_: self.tab.save())
+        self.add_action(save_action)
+
+        header = Gtk.HeaderBar(show_close_button=True, title=APP_NAME)
+        self.set_titlebar(header)
+        self.header = header
+
+        new_btn = Gtk.Button.new_with_mnemonic("_New")
+        new_btn.set_tooltip_text("Create a new Markdown file (Ctrl+N)")
+        new_btn.connect("clicked", lambda *_: self.new_file())
+        header.pack_start(new_btn)
+
+        open_btn = Gtk.Button.new_with_mnemonic("_Open")
+        open_btn.set_tooltip_text("Open Markdown files in new tabs (Ctrl+O)")
+        open_btn.connect("clicked", lambda *_: self.choose_files())
+        header.pack_start(open_btn)
+
+        self.reload_btn = self.icon_button("view-refresh-symbolic", "Reload (F5)", lambda: self.tab.reload())
+        header.pack_start(self.reload_btn)
+
+        mode_box = Gtk.Box()
+        mode_box.get_style_context().add_class("linked")
+        for key, label, tooltip in VIEW_MODES:
+            btn = Gtk.ToggleButton(label=label, tooltip_text=tooltip)
+            btn.set_detailed_action_name(f"win.view-mode::{key}")
+            mode_box.pack_start(btn, False, False, 0)
+        header.pack_start(mode_box)
+
+        self.edit_btn = Gtk.ToggleButton(action_name="win.edit")
+        self.edit_btn.add(Gtk.Image.new_from_icon_name("document-edit-symbolic", Gtk.IconSize.BUTTON))
+        header.pack_start(self.edit_btn)
+        # Text, not an icon: Mint-Y draws document-save as a download arrow
+        self.save_btn = Gtk.Button.new_with_mnemonic("_Save")
+        self.save_btn.set_action_name("win.save")
+        self.save_btn.set_tooltip_text("Save (Ctrl+S)")
+        self.save_btn.set_no_show_all(True)  # only shown while editing
+        header.pack_start(self.save_btn)
+
+        self.print_btn = self.icon_button("document-print-symbolic", "Print / save as PDF (Ctrl+P)",
+                                          lambda: self.tab.print_document())
+        header.pack_end(self.print_btn)
+
+        theme_menu = Gio.Menu()
+        for key, label in THEMES:
+            theme_menu.append(label, f"app.theme::{key}")
+        theme_btn = Gtk.MenuButton(menu_model=theme_menu, tooltip_text="Theme")
+        theme_btn.add(Gtk.Image.new_from_icon_name("weather-clear-night-symbolic", Gtk.IconSize.BUTTON))
+        header.pack_end(theme_btn)
+
+        zoom_box = Gtk.Box()
+        zoom_box.get_style_context().add_class("linked")
+        zoom_box.pack_start(self.icon_button("zoom-out-symbolic", "Zoom out (Ctrl+-)",
+                                             lambda: self.tab.zoom(-ZOOM_STEP)), False, False, 0)
+        self.zoom_label = Gtk.Button(label="100%")
+        self.zoom_label.set_tooltip_text("Reset zoom (Ctrl+0)")
+        self.zoom_label.connect("clicked", lambda *_: self.tab.zoom(None))
+        zoom_box.pack_start(self.zoom_label, False, False, 0)
+        zoom_box.pack_start(self.icon_button("zoom-in-symbolic", "Zoom in (Ctrl++)",
+                                             lambda: self.tab.zoom(ZOOM_STEP)), False, False, 0)
+        header.pack_end(zoom_box)
+
+        self.notebook = Gtk.Notebook(scrollable=True, show_border=False)
+        self.notebook.connect("switch-page", lambda _nb, tab, _num: self.sync(tab))
+
+        self.status = Gtk.Label(xalign=0)
+        self.status.set_margin_start(10)
+        self.status.set_margin_end(10)
+        self.status.set_margin_top(3)
+        self.status.set_margin_bottom(3)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.pack_start(self.notebook, True, True, 0)
+        box.pack_start(Gtk.Separator(), False, False, 0)
+        box.pack_start(self.status, False, False, 0)
+        self.add(box)
+
+        self.connect("key-press-event", self.on_key)
+        self.connect("delete-event", self.on_delete)
+        self.add_tab()
+
+    def icon_button(self, icon, tooltip, callback):
+        btn = Gtk.Button.new_from_icon_name(icon, Gtk.IconSize.BUTTON)
+        btn.set_tooltip_text(tooltip)
+        btn.connect("clicked", lambda *_: callback())
+        return btn
+
+    @property
+    def tab(self):
+        return self.notebook.get_nth_page(self.notebook.get_current_page())
+
+    @property
+    def tabs(self):
+        return self.notebook.get_children()
+
+    # ---- tabs -------------------------------------------------------------
+
+    def add_tab(self):
+        tab = DocumentTab(self.get_application())
+        tab.connect("changed", self.on_tab_changed)
+        tab.connect("open-file", lambda _tab, path: self.open_paths([path]))
+        tab.show_all()
+        index = self.notebook.append_page(tab, TabLabel(lambda: self.close_tab(tab)))
+        self.notebook.set_tab_reorderable(tab, True)
+        self.notebook.set_current_page(index)
+        self.on_tab_changed(tab)
+        self.update_tab_bar()
+        return tab
+
+    def remove_tab(self, tab):
+        tab.stop_watching()
+        self.notebook.remove_page(self.notebook.page_num(tab))
+        tab.destroy()
+        if self.notebook.get_n_pages() == 0:
+            self.add_tab()  # a window always shows something, if only the placeholder
+        self.update_tab_bar()
+
+    def close_tab(self, tab):
+        """Close a tab after asking about unsaved edits; returns False if the user cancelled."""
+        self.show_tab(tab)
+        if not tab.confirm_unsaved():
+            return False
+        self.remove_tab(tab)
+        return True
+
+    def show_tab(self, tab):
+        self.notebook.set_current_page(self.notebook.page_num(tab))
+        self.present()
+
+    def cycle_tab(self, step):
+        self.notebook.set_current_page((self.notebook.get_current_page() + step) % self.notebook.get_n_pages())
+
+    def update_tab_bar(self):
+        # Hide the tab bar while the window only shows the "No document" placeholder
+        self.notebook.set_show_tabs(any(tab.path for tab in self.tabs) or self.notebook.get_n_pages() > 1)
+
+    def open_paths(self, paths, edit=False):
+        """Open each file in a tab, reusing an empty tab; an already open file just gets shown."""
+        app = self.get_application()
+        for path in paths:
+            path = os.path.abspath(path)
+            tab = app.find_tab(path)
+            if tab is None:
+                reuse = self.tab.path is None
+                tab = self.tab if reuse else self.add_tab()
+                if not tab.open_file(path):
+                    if not reuse:
+                        self.remove_tab(tab)
+                    continue
+            tab.get_toplevel().show_tab(tab)
+            if edit:
+                tab.set_editing(True)
+        self.update_tab_bar()
+
+    def on_tab_changed(self, tab):
+        self.notebook.get_tab_label(tab).update(tab)
+        if tab is self.tab:
+            self.sync(tab)
+
+    def sync(self, tab):
+        """Show the state of `tab` (the current one) in the actions, header bar and status bar."""
+        self.lookup_action("view-mode").set_state(GLib.Variant.new_string(tab.view_mode))
+        edit = self.lookup_action("edit")
+        edit.set_state(GLib.Variant.new_boolean(tab.editing))
+        edit.set_enabled(tab.editing or tab.can_edit)
+        self.lookup_action("save").set_enabled(tab.editing)
+        self.save_btn.set_visible(tab.editing)
+        if tab.path is not None and not tab.lossless:
+            self.edit_btn.set_tooltip_text("Can't edit: the file is not valid UTF-8")
+        else:
+            self.edit_btn.set_tooltip_text("Edit the source in Source view (Ctrl+E)")
+        for w in (self.reload_btn, self.print_btn):
+            w.set_sensitive(tab.path is not None and not tab.editing)
+        self.zoom_label.set_label(f"{round(tab.zoom_level * 100)}%")
+
+        title = f"*{tab.title}" if tab.modified else tab.title
+        self.header.set_subtitle(os.path.dirname(tab.path) if tab.path else None)
+        self.set_title(f"{title} – {APP_NAME}" if tab.path else APP_NAME)
+        self.status.set_text(tab.status_text)
+
+    def on_delete(self, *_):
+        """Ask about every tab's unsaved edits before the window closes; True keeps it open."""
+        for tab in self.tabs:
+            if tab.modified:
+                self.show_tab(tab)
+                if not tab.confirm_unsaved():
+                    return True
+        for tab in self.tabs:
+            tab.stop_watching()
         return False
 
     # ---- actions --------------------------------------------------------
@@ -845,20 +1018,19 @@ class ViewerWindow(Gtk.ApplicationWindow):
         any_filter.set_name("All files")
         any_filter.add_pattern("*")
         dialog.add_filter(any_filter)
-        if self.path:
-            dialog.set_current_folder(os.path.dirname(self.path))
+        if self.tab.path:
+            dialog.set_current_folder(os.path.dirname(self.tab.path))
         return dialog
 
-    def choose_file(self):
-        if not self.confirm_unsaved():
-            return
-        dialog = self.file_dialog("Open Markdown file", Gtk.FileChooserAction.OPEN, "_Open")
-        if dialog.run() == Gtk.ResponseType.ACCEPT:
-            self.open_file(dialog.get_filename())
+    def choose_files(self):
+        dialog = self.file_dialog("Open Markdown files", Gtk.FileChooserAction.OPEN, "_Open")
+        dialog.set_select_multiple(True)
+        paths = dialog.get_filenames() if dialog.run() == Gtk.ResponseType.ACCEPT else []
         dialog.destroy()
+        self.open_paths(paths)
 
     def new_file(self):
-        """Ask where to create an empty Markdown file, then open it for editing."""
+        """Ask where to create an empty Markdown file, then open it in a tab for editing."""
         dialog = self.file_dialog("New Markdown file", Gtk.FileChooserAction.SAVE, "_Create")
         dialog.set_do_overwrite_confirmation(True)
         dialog.set_current_name("Untitled.md")
@@ -869,69 +1041,60 @@ class ViewerWindow(Gtk.ApplicationWindow):
         if not path.lower().endswith(MD_SUFFIXES):
             path += ".md"
             if os.path.exists(path):  # the dialog only confirmed overwriting the name without .md
-                self.error(f"Could not create {path}", "A file with this name already exists.")
+                show_error(self, f"Could not create {path}", "A file with this name already exists.")
                 return
         try:
             with open(path, "wb"):
                 pass
         except OSError as e:
-            self.error(f"Could not create {path}", str(e))
+            show_error(self, f"Could not create {path}", str(e))
             return
-        self.get_application().open_window(path, edit=True, reuse=self if self.path is None else None)
-
-    def print_document(self):
-        if self.path and not self.editing:
-            WebKit2.PrintOperation.new(self.webview).run_dialog(self)
-
-    def zoom(self, step):
-        level = 1.0 if step is None else min(max(self.webview.get_zoom_level() + step, 0.3), 3.0)
-        self.webview.set_zoom_level(level)
-        self.editor.set_zoom(level)
-        self.zoom_label.set_label(f"{round(level * 100)}%")
+        self.open_paths([path], edit=True)
 
     def on_key(self, _widget, event):
         ctrl = event.state & Gdk.ModifierType.CONTROL_MASK
         key = Gdk.keyval_name(event.keyval)
+        tab = self.tab
         if ctrl and key == "o":
-            self.choose_file()
+            self.choose_files()
         elif ctrl and key == "n":
             self.new_file()
         elif ctrl and key == "p":
-            self.print_document()
+            tab.print_document()
         elif ctrl and key == "s":
-            self.save()
+            tab.save()
         elif ctrl and key == "e":
             if self.lookup_action("edit").get_enabled():
                 self.activate_action("edit", None)
         elif (ctrl and key == "r") or key == "F5":
-            self.reload()
+            tab.reload()
         elif ctrl and key in ("plus", "equal", "KP_Add"):
-            self.zoom(ZOOM_STEP)
+            tab.zoom(ZOOM_STEP)
         elif ctrl and key in ("minus", "KP_Subtract"):
-            self.zoom(-ZOOM_STEP)
+            tab.zoom(-ZOOM_STEP)
         elif ctrl and key in ("0", "KP_0"):
-            self.zoom(None)
+            tab.zoom(None)
         elif ctrl and key in ("1", "2", "3", "KP_1", "KP_2", "KP_3"):
-            mode = VIEW_MODES[int(key[-1]) - 1][0]
-            self.lookup_action("view-mode").change_state(GLib.Variant.new_string(mode))
-        elif ctrl and key in ("w", "q"):
+            tab.set_view_mode(VIEW_MODES[int(key[-1]) - 1][0])
+        elif ctrl and key in ("Tab", "Page_Down"):
+            self.cycle_tab(1)
+        elif ctrl and key in ("ISO_Left_Tab", "Page_Up"):  # Ctrl+Shift+Tab arrives as ISO_Left_Tab
+            self.cycle_tab(-1)
+        elif ctrl and key == "w":
+            if tab.path is None and self.notebook.get_n_pages() == 1:
+                self.close()  # only the placeholder is left
+            else:
+                self.close_tab(tab)
+        elif ctrl and key == "q":
             self.close()
         else:
             return False
         return True
 
-    def error(self, title, detail):
-        dialog = Gtk.MessageDialog(transient_for=self, message_type=Gtk.MessageType.ERROR,
-                                   buttons=Gtk.ButtonsType.CLOSE, text=title)
-        dialog.format_secondary_text(detail)
-        dialog.run()
-        dialog.destroy()
-
 
 class ViewerApp(Gtk.Application):
     def __init__(self):
-        super().__init__(application_id="local.MarkdownViewer",
-                         flags=Gio.ApplicationFlags.HANDLES_OPEN | Gio.ApplicationFlags.NON_UNIQUE)
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_OPEN)
         self.config = GLib.KeyFile()
         try:
             self.config.load_from_file(CONFIG_FILE, GLib.KeyFileFlags.NONE)
@@ -972,26 +1135,31 @@ class ViewerApp(Gtk.Application):
 
     def on_theme_changed(self):
         self.themes.apply()
-        for win in self.get_windows():
-            if isinstance(win, ViewerWindow):
-                win.rerender()
+        for win in self.viewer_windows():
+            for tab in win.tabs:
+                tab.rerender()
 
+    def viewer_windows(self):
+        return [w for w in self.get_windows() if isinstance(w, ViewerWindow)]
+
+    def find_tab(self, path):
+        return next((tab for win in self.viewer_windows() for tab in win.tabs if tab.path == path), None)
+
+    def target_window(self):
+        """The most recently used window, or a new one."""
+        win = self.get_active_window()
+        if not isinstance(win, ViewerWindow):
+            win = ViewerWindow(self)
+            win.show_all()
+        return win
 
     def do_activate(self):
-        ViewerWindow(self).show_all()
+        self.target_window().present()
 
     def do_open(self, files, _n_files, _hint):
-        for f in files:
-            self.open_window(f.get_path())
-
-    def open_window(self, path, edit=False, reuse=None):
-        """Show a file in a new window (or in `reuse`, an empty one), optionally ready to edit."""
-        win = reuse or ViewerWindow(self)
-        win.show_all()
-        win.open_file(path)
-        if edit and win.path == os.path.abspath(path):
-            win.lookup_action("view-mode").change_state(GLib.Variant.new_string("source"))
-            win.activate_action("edit", None)
+        # Runs in the first instance, also for files opened later from the file manager
+        win = self.target_window()
+        win.open_paths([f.get_path() for f in files if f.get_path()])
         win.present()
 
 

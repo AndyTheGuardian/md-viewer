@@ -13,6 +13,7 @@ A native Linux Mint viewer that opens `.md` files and displays them formatted li
 - *(Added 2026-10-27)* A theme switch with three choices: Follow system, Dark, Light.
 - *(Added 2026-10-31)* Editing in the code (Source) view, switched on with a button. Built with GtkSourceView on the git branch `feature/source-editor`, merged into `main` on 2026-10-31.
 - *(Added 2026-10-31)* Creating a new .md file.
+- *(Added 2026-11-07)* Several files open at the same time in tabs. VS Code becomes the default view, the order becomes VS Code, Source, Document, and editing or creating a file switches to Source view automatically. Built on the git branch `feature/tabs`.
 
 ## Files
 
@@ -40,7 +41,7 @@ Run: `python3 ~/Claude/md-viewer/md_viewer.py [file.md ...]`
 
 **View modes**
 
-The header bar has a linked toggle with three modes, in this order (changed on user request): **Source | VS Code | Document**. Ctrl+1, Ctrl+2 and Ctrl+3 also switch between them, in the same order. Default: Source.
+The header bar has a linked toggle with three modes, in this order (changed on user request on 2026-11-07): **VS Code | Source | Document**. Ctrl+1, Ctrl+2 and Ctrl+3 also switch between them, in the same order. Default: VS Code.
 
 **Code-block syntax highlighting in all views**
 - Document and VS Code views: markdown-it's `highlight` option calls `highlight_code()`.
@@ -51,8 +52,8 @@ The header bar has a linked toggle with three modes, in this order (changed on u
   - `SOURCE_CSS` comes later and overrides the classes that mean Markdown syntax in Source view (`gh`, `gu`, `sb`, `nt`, `na`, `gd`, …).
   - `build_css()` collects *all* `:root` blocks into the print override, so printouts use light code colours too.
 - How it works:
-  - It is a stateful window action, `win.view-mode`.
-  - Each window has its own mode. Every window opens in **Source** (`DEFAULT_VIEW_MODE`), changed on user request. The last-used mode is deliberately *not* remembered any more.
+  - It is a stateful window action, `win.view-mode`. It only mirrors the current tab's mode and passes changes on to `DocumentTab.set_view_mode()`.
+  - Each tab has its own mode. Every tab opens in **VS Code** (`DEFAULT_VIEW_MODE`), changed on user request on 2026-11-07. The last-used mode is deliberately *not* remembered.
   - Switching re-renders the page and keeps the reading position as a *fraction* of the page height, because the layouts have different lengths.
 - **Document** (`DOCUMENT_CSS`): the Word look described below.
 - **VS Code** (`VSCODE_CSS`): modelled on VS Code's built-in Markdown preview with the Light/Dark Modern themes.
@@ -96,8 +97,10 @@ The header bar has a linked toggle with three modes, in this order (changed on u
 - The status bar shows the word count (always of the rendered text), the line count and the path.
 
 **Editing in Source view**
-- The pencil toggle button in the header bar (or Ctrl+E) switches the Source view into an editor.
-  - It is a stateful boolean window action, `win.edit`. It is only enabled in Source view with a file open, and not for files that aren't valid UTF-8, because saving would lose their bytes.
+- The pencil toggle button in the header bar (or Ctrl+E) switches the current tab into an editor.
+  - It is a stateful boolean window action, `win.edit`, that mirrors the current tab (`DocumentTab.set_editing()`). It is enabled in every view when a file is open, but not for files that aren't valid UTF-8, because saving would lose their bytes.
+  - Editing always happens in Source view (`EDIT_VIEW_MODE`). Starting to edit from VS Code or Document view switches the tab to Source first, keeping the reading position. Leaving Source view while editing ends editing.
+  - Editing is per tab: other tabs keep their own view and are not affected.
   - The read-only WebView and the editor (`SourceEditor`, a `GtkSource.View` in a `Gtk.ScrolledWindow`) share a `Gtk.Stack`.
   - The editor has line numbers, Markdown highlighting, undo/redo (Ctrl+Z / Ctrl+Shift+Z), auto-indent and word wrap. It uses the same monospace font as the Source view.
   - Colour schemes: the app's own `vscode-light` / `vscode-dark` from `styles/` (`EDITOR_SCHEMES`). They use the same colours as the read-only Source view (see the table above), plus VS Code's selection, cursor and current-line colours.
@@ -115,14 +118,14 @@ The header bar has a linked toggle with three modes, in this order (changed on u
   - Entering and leaving the editor keeps the reading position (approximately, as a fraction of the lines).
 - Saving: the **Save** button (only shown while editing) or Ctrl+S.
   - Files are written as UTF-8 and keep their original line ends (`read_markdown()` / `encode_markdown()` detect and restore CRLF).
-  - Unsaved changes show as `*` in front of the title.
-- Unsaved changes: leaving the editor, switching the view, opening another file or closing the window asks "Save / Discard / Cancel" (`confirm_unsaved()`).
+  - Unsaved changes show as `*` in front of the window title and the tab name.
+- Unsaved changes: leaving the editor, switching the view, closing the tab or closing the window asks "Save / Discard / Cancel" (`confirm_unsaved()`). Closing the window asks once per modified tab and shows that tab first.
 - While editing, Reload and Print are disabled, and the automatic reload on file changes is suppressed, so it can't overwrite the text being edited.
 
 **New file**
 - The **New** button (or Ctrl+N) first asks where to save, using a save dialog that suggests `Untitled.md` and starts in the current file's folder.
-- It then creates the empty file and opens it in a new window, in Source view and already in edit mode (`ViewerApp.open_window(path, edit=True)`).
-  - A window that shows no file (the placeholder) is reused instead of opening a second one.
+- It then creates the empty file and opens it in a new tab, switched to Source view and already in edit mode (`ViewerWindow.open_paths([path], edit=True)`).
+  - A tab that shows no file (the placeholder) is reused.
 - If the name has no Markdown suffix, `.md` is added. If a file with that name already exists, nothing is overwritten and an error is shown, because the dialog only confirmed overwriting the name without `.md`.
 - Choosing an existing name *with* the suffix asks the dialog's usual "Replace?" question; replacing empties that file.
 
@@ -174,39 +177,53 @@ The header bar has a linked toggle with three modes, in this order (changed on u
 - Headings get GitHub-style ids (`render_markdown()`), so `[link](#heading)` jumps within the document. Duplicate headings get `-1`, `-2` suffixes.
 - Not supported: footnotes, task lists, auto-linking of bare URLs. These need the `mdit_py_plugins` / `linkify-it-py` packages, which are not installed. `MarkdownIt("gfm-like")` crashes without linkify.
 
+**Tabs**
+- Every open file is a tab (`DocumentTab`, a `Gtk.Box` with its own WebView, editor, file monitor, view mode and zoom) in a `Gtk.Notebook`.
+  - The window (`ViewerWindow`) only holds the header bar, tabs and status bar. `sync()` shows the current tab's state there, on every tab switch and on the tab's `changed` signal.
+  - Tab header (`TabLabel`): the file name, `*` while modified, a close button, and the full path as tooltip. Tabs can be reordered by dragging.
+  - The tab bar is hidden while the window only shows the "No document" placeholder.
+- Opening files:
+  - **Open** (Ctrl+O) allows selecting several files; each opens in a new tab.
+  - A file that is already open in any window is not opened twice; its tab is shown instead (`ViewerApp.find_tab()`).
+  - An empty placeholder tab is reused for the first file.
+  - Links to other local `.md` files and dropped `.md` files open in a new tab (the tab's `open-file` signal).
+- Single instance: the app is unique (`APP_ID`, no more `NON_UNIQUE`). Starting it again, e.g. by double-clicking an .md file in the file manager, hands the files to the running instance (`do_open`), which opens them as tabs in the most recently used window, and the second process exits at once.
+- Closing: Ctrl+W or a tab's close button closes the tab; closing the last tab leaves the placeholder, and Ctrl+W on the placeholder closes the window. Ctrl+Q closes the window.
+
 **Window and controls**
 - Header bar:
   - **New** and **Open** buttons.
   - Reload button.
-  - View-mode toggle: Source, VS Code, Document.
+  - View-mode toggle: VS Code, Source, Document.
   - Edit toggle (pencil) and, while editing, a Save button.
   - Zoom −, a percentage button that resets zoom, and zoom +.
   - Theme menu: Follow system, Light, Dark.
   - Print button, for printing or saving as PDF.
-- Status bar: word count and the full path of the open file.
-- Keyboard shortcuts:
+- Status bar: word count, line count and the full path of the current tab's file.
+- Keyboard shortcuts (they act on the current tab):
 
   | Keys | Action |
   |---|---|
-  | Ctrl+N | New file |
-  | Ctrl+O | Open |
+  | Ctrl+N | New file (new tab) |
+  | Ctrl+O | Open (several files possible, each in a new tab) |
   | Ctrl+P | Print |
   | F5 or Ctrl+R | Reload |
   | Ctrl++ / Ctrl+− / Ctrl+0 | Zoom in / out / reset (30 % to 300 %) |
-  | Ctrl+1 / Ctrl+2 / Ctrl+3 | Source / VS Code / Document view |
-  | Ctrl+E | Start / stop editing (Source view) |
+  | Ctrl+1 / Ctrl+2 / Ctrl+3 | VS Code / Source / Document view |
+  | Ctrl+E | Start / stop editing (switches to Source view) |
   | Ctrl+S | Save while editing |
-  | Ctrl+W or Ctrl+Q | Close |
+  | Ctrl+Tab / Ctrl+Shift+Tab, Ctrl+PgDn / Ctrl+PgUp | Next / previous tab |
+  | Ctrl+W | Close tab |
+  | Ctrl+Q | Close window |
 
-- Ways to open a file: the file dialog (filtered to .md, .markdown, .mdown and .mkd), the command line, "Open With", or dragging a file onto the window.
-- When there is no file, a placeholder page is shown.
+- Ways to open a file: the file dialog (filtered to .md, .markdown, .mdown and .mkd), the command line, "Open With", double-click in the file manager, or dragging a file onto the window.
+- When no file is open, a placeholder page is shown.
 - The view reloads automatically when the file is saved, using `Gio.FileMonitor`, and keeps the scroll position.
 - Link handling:
   - `#anchors` are followed inside the page.
-  - Links to other local `.md` files open in the viewer.
+  - Links to other local `.md` files open in a new tab.
   - Everything else (http, mailto, other files) opens in the default app.
 - The browser-only entries (Back, Forward, Reload, Inspect) are removed from the right-click menu.
-- Each file opens in its own window (`NON_UNIQUE` app).
 
 **Known environment quirk**
 - WebKit's GPU compositing showed a blank page on this VM.
@@ -219,7 +236,7 @@ The header bar has a linked toggle with three modes, in this order (changed on u
 - Auto-reload: appending to the open file changed the word count from 65 to 70 without user action.
 - Screenshots of all 6 combinations (3 view modes × light/dark) were checked. The window chrome switched to `Mint-Y-Aqua` for Light and `Mint-Y-Dark-Aqua` for Dark.
 - Edit mode (2026-10-31), with a scripted GTK test (18 checks, all passed) and screenshots in light, dark and at 150 % zoom:
-  - Edit is enabled only in Source view, and not for an invalid-UTF-8 file.
+  - Edit is enabled only in Source view (changed on 2026-11-07: now in every view), and not for an invalid-UTF-8 file.
   - Save button visible and Reload/Print disabled while editing; `*` in the title when modified.
   - An external file change while editing does not touch the buffer.
   - Cancel on a view switch keeps the editor and the view toggle; Save writes the file and switches; Discard leaves the file unchanged; Cancel on close keeps the window open.
@@ -229,6 +246,16 @@ The header bar has a linked toggle with three modes, in this order (changed on u
   - The file is created empty; an empty window is reused, otherwise a second window opens, in Source view and editing.
   - An existing `notes.md` is not overwritten when `notes` is entered; Cancel creates nothing.
   - The edit-mode test still passes 18/18.
+- Tabs (2026-11-07), with a new scripted GTK test (29 checks, all passed; file dialogs stubbed). It replaces the two earlier test scripts, whose checks it covers again:
+  - Order VS Code, Source, Document; new tabs open in VS Code; placeholder reused; tab bar hidden for the placeholder only.
+  - Open with several files; an already open file is shown, not opened twice.
+  - View mode and zoom are per tab and follow tab switches.
+  - Editing from VS Code or Document view switches to Source; other tabs are unaffected; `*` in tab and title.
+  - Cancel on view switch, tab close and window close keeps the edits; Save on close writes the file.
+  - Links and `app.open()` (files from outside) open new tabs; New opens a tab in Source and editing.
+  - CRLF kept, external changes ignored while editing, invalid UTF-8 not editable, closing all tabs leaves the placeholder.
+  - Single instance with two real processes: the second start exited after 0.8 s with code 0, and its file appeared as a second tab in the first process.
+- Testing gotcha: tests must set `md_viewer.APP_ID` to their own id. With the real id, a running viewer would receive the test's files instead.
 - Testing gotcha: don't redirect `XDG_CONFIG_HOME` in tests. dconf reads the user's GSettings from there, so the app then sees default (light) desktop settings. Patch `md_viewer.CONFIG_FILE` instead.
 
 ## Ideas / possible changes (not done)
@@ -277,3 +304,9 @@ The header bar has a linked toggle with three modes, in this order (changed on u
     - Fixed during testing: a JS block swallowed the rest of the file. The fix is the line-by-line highlighting described above.
     - Compared with screenshots in light and dark (Python, JS, an unknown tag, a quote with inline markup, inline HTML); both test scripts still pass.
   - User request: creating a new .md file. Added the New button (Ctrl+N): it asks for the location first, then opens the empty file in a new window, ready to edit.
+- **2026-11-07**
+  - User request: several files in tabs, VS Code as the default view, the order VS Code, Source, Document, and an automatic switch to Source for editing and new files. On branch `feature/tabs`:
+    - Split the per-file state out of the window into `DocumentTab`; the window became a tab container (`Gtk.Notebook`) that mirrors the current tab.
+    - Single-instance app; files opened later become tabs. Open allows multiple selection; links open new tabs; view mode and zoom are per tab.
+    - Edit is now enabled in every view and switches to Source; New opens a tab instead of a window.
+    - New tab shortcuts (Ctrl+Tab, Ctrl+PgUp/PgDn); Ctrl+W now closes the tab, Ctrl+Q the window.
