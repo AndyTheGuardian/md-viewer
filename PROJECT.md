@@ -23,6 +23,9 @@ A native Linux Mint viewer that opens `.md` files and displays them formatted li
 | `~/Claude/md-viewer/PROJECT.md` | This file: project notes, kept up to date |
 | `~/Claude/md-viewer/styles/vscode-light.xml`, `vscode-dark.xml` | GtkSourceView style schemes with VS Code Light+ / Dark+ colours for the editor. They are found next to the script (`STYLES_DIR`, symlinks resolved). |
 | `~/Claude/md-viewer/language-specs/mdviewer-markdown.lang` | Extended Markdown grammar for the editor: GtkSourceView's `markdown.lang` plus fenced code in its language and coloured quote text. Found next to the script (`LANGUAGE_SPECS_DIR`). |
+| `~/Claude/md-viewer/docs/` | German end-user and developer documentation: `ANWENDERDOKUMENTATION.md` (installation, operation, troubleshooting), `BENUTZERHANDBUCH.md` (step-by-step manual with screenshots), `ENTWICKLERDOKUMENTATION.md` (structure, Mermaid diagrams, extending, testing); `bilder/` screenshots, `beispiel/` sample files |
+| `~/Claude/md-viewer/tests/test_tabs.py` | End-to-end test of the GTK app (29 checks); `python3 tests/test_tabs.py`, exit code 0 = all passed |
+| `~/Claude/md-viewer/tools/doku_screenshots.py` | Recreates `docs/bilder/` and `docs/beispiel/` |
 | `~/Claude/md-viewer/OFFENE-PUNKTE.md` | Open questions, assumptions and known limitations (German, with IDs) |
 | `~/.config/md-viewer/settings.ini` | Saved preferences: `[viewer] theme=system\|light\|dark`. Created on the first change. The view mode is not saved. |
 | `~/.local/share/applications/markdown-viewer.desktop` | Menu launcher ("Markdown Viewer", Office category). It registers `text/markdown` and `text/x-markdown`, so the app shows up under "Open With" for .md files. No other app had claimed .md files, so `xdg-mime query default text/markdown` now returns this launcher, which means double-clicking an .md file opens it in the viewer. |
@@ -311,4 +314,7 @@ The header bar has a linked toggle with three modes, in this order (changed on u
     - Single-instance app; files opened later become tabs. Open allows multiple selection; links open new tabs; view mode and zoom are per tab.
     - Edit is now enabled in every view and switches to Source; New opens a tab instead of a window.
     - New tab shortcuts (Ctrl+Tab, Ctrl+PgUp/PgDn); Ctrl+W now closes the tab, Ctrl+Q the window.
+  - Project accepted by the user. As required by CLAUDE.md, wrote the user documentation (`docs/ANWENDERDOKUMENTATION.md`), the user manual with screenshots in light and dark (`docs/BENUTZERHANDBUCH.md`), and, on user request, a developer documentation with project structure and five Mermaid diagrams (`docs/ENTWICKLERDOKUMENTATION.md`).
+    - Moved the tabs test and the screenshot script from the scratchpad into the project (`tests/`, `tools/`), so the developer documentation can point to them.
+    - Verified: all Mermaid diagrams parse and render (Mermaid 11.4.1 in a browser); all links and images in the docs resolve; the manual renders with its images in the viewer; screenshots re-taken once because the first was captured from an unfocused (faded) window.
   - User request: in dark mode the active view button couldn't be told apart. Checked header-bar buttons now get a background about 10 % lighter in dark mode. Verified with header screenshots in dark and light (reading and editing); the tabs test still passes 29/29.

@@ -18,6 +18,8 @@ Stand: 2026-11-07
 | E11 | Einschränkung | Alle Dateien laufen in einem Prozess (Single Instance). Stürzt die App ab, sind alle Tabs zu, und ungespeicherte Änderungen in allen Tabs gehen verloren. | bekannt, akzeptiert |
 | E12 | Einschränkung | Offene Tabs werden beim Beenden nicht gemerkt und beim nächsten Start nicht wiederhergestellt. | bekannt; ggf. später nachrüsten |
 | E13 | Einschränkung | Zieht man mehrere Dateien gleichzeitig ins Fenster, öffnet sich voraussichtlich nur die erste (WebKit verarbeitet nur eine Navigation). Nicht getestet. | ungeprüft |
+| E15 | Einschränkung | Mermaid-Diagramme (z. B. in der Entwicklerdokumentation) zeigt der Viewer nur als Codeblock, weil er in Dokumenten kein JavaScript ausführt. GitHub, GitLab und VS Code (mit Mermaid-Erweiterung) zeigen sie als Grafik. | bekannt, akzeptiert |
+| F8 | Frage | Im Ordner liegt eine vom Anwender stammende `STYLE.md` mit Design-Vorgaben (wählbare Akzentfarbe für alle Steuerelemente, Überschriften und Listen; 30 % Deckkraft für inaktive Elemente). Ist sie für den md-viewer gedacht und soll umgesetzt werden? Sie ist bisher nicht umgesetzt und nicht in Git. | offen, an Anwender gestellt |
 
 ## Erledigt
 
@@ -35,3 +37,4 @@ Stand: 2026-11-07
 | A4 | Strg+W schließt den aktuellen Tab (auf dem leeren Platzhalter das Fenster), Strg+Q immer das Fenster: vom Anwender bestätigt. | 2026-11-07 |
 | A5 | Ein erneuter Start aus dem Menü holt das vorhandene Fenster nach vorn; kein zweites Fenster: vom Anwender bestätigt. | 2026-11-07 |
 | E14 | Im Dark Mode war der aktive Ansichts-Button kaum zu erkennen: Aktive Buttons der Kopfzeile sind jetzt ca. 10 % heller hinterlegt (nur im Dark Mode). | 2026-11-07 |
+| D1 | Projekt abgenommen; Anwenderdokumentation, Benutzerhandbuch und Entwicklerdokumentation in `docs/` erstellt (Format Markdown, Aufteilung Technik/Bedienung, Screenshots hell und dunkel – vom Anwender so gewählt). | 2026-11-07 |
